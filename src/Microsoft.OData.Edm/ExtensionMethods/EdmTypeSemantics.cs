@@ -542,6 +542,94 @@ namespace Microsoft.OData.Edm
         }
 
         /// <summary>
+        /// Returns true if this reference refers to a dictionary type.
+        /// </summary>
+        /// <param name="type">Type reference.</param>
+        /// <returns>This reference refers to a dictionary type.</returns>
+        public static bool IsDictionaryOfStringObject(this IEdmTypeReference type)
+        {
+            EdmUtil.CheckArgumentNull(type, "type");
+            return type.Definition.IsDictionaryOfStringObject();
+        }
+
+        /// <summary>
+        /// Returns true if this definition refers to a dictionary type.
+        /// </summary>
+        /// <param name="type">Type reference.</param>
+        /// <returns>This definition refers to a dictionary type.</returns>
+        public static bool IsDictionaryOfStringObject(this IEdmType type)
+        {
+            EdmUtil.CheckArgumentNull(type, "type");
+            IEdmPrimitiveType primitiveType = type as IEdmPrimitiveType;
+            if (primitiveType == null)
+            {
+                return false;
+            }
+
+            return primitiveType.PrimitiveKind.IsDictionaryOfStringObject();
+        }
+
+        /// <summary>
+        /// Returns true if this type kind represents a dictionary type.
+        /// </summary>
+        /// <param name="typeKind">Type reference.</param>
+        /// <returns>This kind refers to a dictionary type.</returns>
+        public static bool IsDictionaryOfStringObject(this EdmPrimitiveTypeKind typeKind)
+        {
+            switch (typeKind)
+            {
+                case EdmPrimitiveTypeKind.DictionaryOfStringObject:
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Returns true if this reference refers to a dictionary type.
+        /// </summary>
+        /// <param name="type">Type reference.</param>
+        /// <returns>This reference refers to a dictionary type.</returns>
+        public static bool IsDictionaryOfStringString(this IEdmTypeReference type)
+        {
+            EdmUtil.CheckArgumentNull(type, "type");
+            return type.Definition.IsDictionaryOfStringString();
+        }
+
+        /// <summary>
+        /// Returns true if this definition refers to a dictionary type.
+        /// </summary>
+        /// <param name="type">Type reference.</param>
+        /// <returns>This definition refers to a dictionary type.</returns>
+        public static bool IsDictionaryOfStringString(this IEdmType type)
+        {
+            EdmUtil.CheckArgumentNull(type, "type");
+            IEdmPrimitiveType primitiveType = type as IEdmPrimitiveType;
+            if (primitiveType == null)
+            {
+                return false;
+            }
+
+            return primitiveType.PrimitiveKind.IsDictionaryOfStringString();
+        }
+
+        /// <summary>
+        /// Returns true if this type kind represents a dictionary type.
+        /// </summary>
+        /// <param name="typeKind">Type reference.</param>
+        /// <returns>This kind refers to a dictionary type.</returns>
+        public static bool IsDictionaryOfStringString(this EdmPrimitiveTypeKind typeKind)
+        {
+            switch (typeKind)
+            {
+                case EdmPrimitiveTypeKind.DictionaryOfStringString:
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Returns true if this reference refers to a spatial type.
         /// </summary>
         /// <param name="type">Type reference.</param>
@@ -731,6 +819,8 @@ namespace Microsoft.OData.Edm
                         case EdmPrimitiveTypeKind.Boolean:
                         case EdmPrimitiveTypeKind.Byte:
                         case EdmPrimitiveTypeKind.Date:
+                        case EdmPrimitiveTypeKind.DictionaryOfStringObject:
+                        case EdmPrimitiveTypeKind.DictionaryOfStringString:
                         case EdmPrimitiveTypeKind.Double:
                         case EdmPrimitiveTypeKind.Guid:
                         case EdmPrimitiveTypeKind.Int16:
@@ -1290,6 +1380,8 @@ namespace Microsoft.OData.Edm
                 case EdmPrimitiveTypeKind.Boolean:
                 case EdmPrimitiveTypeKind.Byte:
                 case EdmPrimitiveTypeKind.Date:
+                case EdmPrimitiveTypeKind.DictionaryOfStringObject:
+                case EdmPrimitiveTypeKind.DictionaryOfStringString:
                 case EdmPrimitiveTypeKind.Double:
                 case EdmPrimitiveTypeKind.Guid:
                 case EdmPrimitiveTypeKind.Int16:
