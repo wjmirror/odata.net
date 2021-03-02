@@ -2020,6 +2020,7 @@ namespace Microsoft.OData.Metadata
                 case EdmPrimitiveTypeKind.Date:
                 case EdmPrimitiveTypeKind.DictionaryOfStringObject:
                 case EdmPrimitiveTypeKind.DictionaryOfStringString:
+                case EdmPrimitiveTypeKind.Object:
                 case EdmPrimitiveTypeKind.Double:
                 case EdmPrimitiveTypeKind.Guid:
                 case EdmPrimitiveTypeKind.Int16:

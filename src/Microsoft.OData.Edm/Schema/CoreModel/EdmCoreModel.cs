@@ -58,6 +58,7 @@ namespace Microsoft.OData.Edm
                 new EdmCoreModelPrimitiveType(EdmPrimitiveTypeKind.Decimal),
                 new EdmCoreModelPrimitiveType(EdmPrimitiveTypeKind.DictionaryOfStringObject),
                 new EdmCoreModelPrimitiveType(EdmPrimitiveTypeKind.DictionaryOfStringString),
+                new EdmCoreModelPrimitiveType(EdmPrimitiveTypeKind.Object),
                 new EdmCoreModelPrimitiveType(EdmPrimitiveTypeKind.Binary),
                 new EdmCoreModelPrimitiveType(EdmPrimitiveTypeKind.String),
                 new EdmCoreModelPrimitiveType(EdmPrimitiveTypeKind.Stream),

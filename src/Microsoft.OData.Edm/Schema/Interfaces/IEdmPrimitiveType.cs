@@ -187,6 +187,11 @@ namespace Microsoft.OData.Edm
         DictionaryOfStringString,
 
         /// <summary>
+        /// Represents an Object type.
+        /// </summary>
+        Object,
+
+        /// <summary>
         /// Represents a TimeOfDay type
         /// </summary>
         TimeOfDay,
