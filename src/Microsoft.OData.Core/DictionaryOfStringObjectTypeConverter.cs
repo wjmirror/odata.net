@@ -16,7 +16,7 @@ namespace Microsoft.OData
     /// <summary>
     /// Handles serialization and deserialization for types derived from Geography.
     /// </summary>
-    internal sealed class DictionaryStringObjectTypeConverter : IPrimitiveTypeConverter
+    internal sealed class DictionaryOfStringObjectTypeConverter : IPrimitiveTypeConverter
     {
         /// <summary>
         /// Write the Atom representation of an instance of a primitive type to an XmlWriter.
