@@ -1509,6 +1509,7 @@ namespace Microsoft.OData
         /// Start writing a delta link or delta deleted link - implementation of the actual functionality.
         /// </summary>
         /// <param name="deltaLink">Delta (deleted) link to write.</param>
+        /// <returns>The task.</returns>
         private async Task WriteDeltaLinkAsyncImplementation(ODataDeltaLinkBase deltaLink)
         {
             await TaskUtils.GetTaskForSynchronousOperation(() =>
@@ -1585,6 +1586,7 @@ namespace Microsoft.OData
         /// Write primitive value asynchronously - implementation of the actual functionality.
         /// </summary>
         /// <param name="primitiveValue">Primitive value to write.</param>
+        /// <returns>The task.</returns>
         private async Task WritePrimitiveValueAsyncImplementation(ODataPrimitiveValue primitiveValue)
         {
             await InterceptExceptionAsync(async () =>
@@ -1858,7 +1860,6 @@ namespace Microsoft.OData
             }
             else
             {
-
                 if (this.outputContext.Synchronous)
                 {
                     throw new ODataException(Strings.ODataWriterCore_AsyncCallOnSyncWriter);
@@ -2056,7 +2057,7 @@ namespace Microsoft.OData
                 IEdmEntityType entityType = resourceType as IEdmEntityType;
                 if (resource.Id == null &&
                     entityType != null &&
-                    (resource is ODataDeletedResource || this.outputContext.MessageWriterSettings.Version > ODataVersion.V4) &&
+                    (this.outputContext.WritingResponse || resource is ODataDeletedResource) &&
                     !HasKeyProperties(entityType, resource.Properties))
                 {
                     throw new ODataException(Strings.ODataWriterCore_DeltaResourceWithoutIdOrKeyProperties);
@@ -2109,6 +2110,7 @@ namespace Microsoft.OData
         /// state ExceptionThrown and then rethrow the exception.
         /// </summary>
         /// <param name="action">The action to execute.</param>
+        /// <returns>The task.</returns>
         private async Task InterceptExceptionAsync(Func<Task> action)
         {
             try
@@ -2337,10 +2339,10 @@ namespace Microsoft.OData
 
                             if (resourceTypeCast != null)
                             {
-                                odataPath.Add(resourceTypeCast);
+                                odataPath = odataPath.AddSegment(resourceTypeCast);
                             }
 
-                            odataPath = odataPath.AppendPropertySegment(structuredProperty);
+                            odataPath = odataPath.AddPropertySegment(structuredProperty);
 
                             derivedTypeConstraints = this.outputContext.Model.GetDerivedTypeConstraints(structuredProperty);
                         }
@@ -2367,7 +2369,7 @@ namespace Microsoft.OData
 
                                 if (resourceTypeCast != null)
                                 {
-                                    odataPath.Add(resourceTypeCast);
+                                    odataPath = odataPath.AddSegment(resourceTypeCast);
                                 }
 
                                 navigationSource = currentNavigationSource == null
@@ -2387,7 +2389,7 @@ namespace Microsoft.OData
                                 {
                                     case EdmNavigationSourceKind.ContainedEntitySet:
                                         // Containment cannot be written alone without odata uri.
-                                        if (odataPath.Count == 0)
+                                        if (!odataPath.Any())
                                         {
                                             throw new ODataException(Strings.ODataWriterCore_PathInODataUriMustBeSetWhenWritingContainedElement);
                                         }
@@ -2396,12 +2398,12 @@ namespace Microsoft.OData
 
                                         if (odataPath != null && typeCastFromExpand != null)
                                         {
-                                            odataPath.Add(typeCastFromExpand);
+                                            odataPath = odataPath.AddSegment(typeCastFromExpand);
                                         }
 
                                         Debug.Assert(navigationSource is IEdmContainedEntitySet, "If the NavigationSourceKind is ContainedEntitySet, the navigationSource must be IEdmContainedEntitySet.");
                                         IEdmContainedEntitySet containedEntitySet = (IEdmContainedEntitySet)navigationSource;
-                                        odataPath = odataPath.AppendNavigationPropertySegment(containedEntitySet.NavigationProperty, containedEntitySet);
+                                        odataPath = odataPath.AddNavigationPropertySegment(containedEntitySet.NavigationProperty, containedEntitySet);
                                         break;
                                     case EdmNavigationSourceKind.EntitySet:
                                         odataPath = new ODataPath(new EntitySetSegment(navigationSource as IEdmEntitySet));
@@ -2459,7 +2461,7 @@ namespace Microsoft.OData
                         "If the current state is Resource the current item must be an ODataResource as well (and not null either).");
                     KeyValuePair<string, object>[] keys = ODataResourceMetadataContext.GetKeyProperties(resource,
                         this.GetResourceSerializationInfo(resource), currentEntityType);
-                    path = path.AppendKeySegment(keys, currentEntityType, this.CurrentScope.NavigationSource);
+                    path = path.AddKeySegment(keys, currentEntityType, this.CurrentScope.NavigationSource);
                 }
             }
             catch (ODataException)

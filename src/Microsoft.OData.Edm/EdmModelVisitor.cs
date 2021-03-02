@@ -263,6 +263,9 @@ namespace Microsoft.OData.Edm
                 case EdmTypeKind.Path:
                     this.ProcessPathTypeReference(reference.AsPath());
                     break;
+                case EdmTypeKind.Untyped:
+                    this.ProcessUntypedTypeReference(reference as IEdmUntypedTypeReference);
+                    break;
                 default:
                     throw new InvalidOperationException(Edm.Strings.UnknownEnumVal_TypeKind(reference.TypeKind().ToString()));
             }
@@ -518,6 +521,11 @@ namespace Microsoft.OData.Edm
         }
 
         protected virtual void ProcessPathTypeReference(IEdmPathTypeReference reference)
+        {
+            this.ProcessTypeReference(reference);
+        }
+
+        protected virtual void ProcessUntypedTypeReference(IEdmUntypedTypeReference reference)
         {
             this.ProcessTypeReference(reference);
         }

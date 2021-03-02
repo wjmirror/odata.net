@@ -1789,8 +1789,8 @@ namespace Microsoft.OData.Edm.Tests.Csdl
             Assert.Equal(2, errors.Count());
             Assert.NotNull(model);
 
-            // 7 built-in + 1 referenced outside
-            Assert.Equal(8, model.ReferencedModels.Count());
+            // 8 built-in + 1 referenced outside
+            Assert.Equal(9, model.ReferencedModels.Count());
             IEdmTerm isoCurrencyTerm = model.FindTerm("Org.OData.Measures.V1.ISOCurrency");
             Assert.NotNull(isoCurrencyTerm);
 
@@ -1814,6 +1814,48 @@ namespace Microsoft.OData.Edm.Tests.Csdl
             var singletons = model.EntityContainer.Singletons();
             IEdmSingleton mainSupplier = Assert.Single(singletons);
             Assert.Equal("MainSupplier", mainSupplier.Name);
+        }
+
+        [Fact]
+        public void ParsingPropertyWithUntypedTypeAsPropertyTypeInJsonWorks()
+        {
+            string csdl = @"{
+  ""$Version"": ""4.0"",
+  ""NS"": {
+    ""Complex"": {
+      ""$Kind"": ""ComplexType"",
+      ""Value"": {
+        ""$Type"": ""Edm.Untyped"",
+        ""$Nullable"": true
+      },
+      ""Data"": {
+        ""$Collection"": true,
+        ""$Type"": ""Edm.Untyped"",
+        ""$Nullable"": true
+      }
+    }
+  }
+}";
+
+            IEdmModel model;
+            IEnumerable<EdmError> errors;
+            Utf8JsonReader jsonReader = GetJsonReader(csdl);
+            bool result = CsdlReader.TryParse(ref jsonReader, out model, out errors);
+            Assert.True(result);
+            Assert.NotNull(model);
+
+            IEdmComplexType complexType = model.SchemaElements.OfType<IEdmComplexType>().FirstOrDefault();
+            Assert.NotNull(complexType);
+
+            Assert.Equal(2, complexType.Properties().Count());
+
+            IEdmProperty valueProperty = complexType.Properties().FirstOrDefault(p => p.Name == "Value");
+            Assert.NotNull(valueProperty);
+            Assert.Equal("Edm.Untyped", valueProperty.Type.FullName());
+
+            IEdmProperty dataProperty = complexType.Properties().FirstOrDefault(p => p.Name == "Data");
+            Assert.NotNull(dataProperty);
+            Assert.Equal("Collection(Edm.Untyped)", dataProperty.Type.FullName());
         }
 
         private static Utf8JsonReader GetMeasureJsonReader(Uri uri, out bool skip)

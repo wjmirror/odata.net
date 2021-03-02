@@ -465,7 +465,7 @@ namespace Microsoft.OData
                 payloadTypeKind == EdmTypeKind.TypeDefinition || payloadTypeKind == EdmTypeKind.Untyped,
                 "The payload type kind must be one of None, Primitive, Enum, Untyped, Complex, Entity, Collection or TypeDefinition.");
             Debug.Assert(
-                expectedTypeReference == null || expectedTypeReference.TypeKind() == expectedTypeKind,
+                expectedTypeReference == null || expectedTypeReference.TypeKind() == EdmTypeKind.Untyped || expectedTypeReference.TypeKind() == expectedTypeKind,
                 "The expected type kind must match the expected type reference if that is available.");
             Debug.Assert(
                 payloadType == null || payloadType.TypeKind == payloadTypeKind,
@@ -823,7 +823,10 @@ namespace Microsoft.OData
                     {
                         // The payload type must be assignable to the expected type.
                         IEdmTypeReference payloadTypeReference = payloadType.ToTypeReference(/*nullable*/ true);
-                        ValidationUtils.ValidateEntityTypeIsAssignable((IEdmEntityTypeReference)expectedTypeReference, (IEdmEntityTypeReference)payloadTypeReference);
+                        if (!expectedTypeReference.IsUntyped())
+                        {
+                            ValidationUtils.ValidateEntityTypeIsAssignable((IEdmEntityTypeReference)expectedTypeReference, (IEdmEntityTypeReference)payloadTypeReference);
+                        }
 
                         // Use the payload type
                         return payloadTypeReference;
@@ -1003,7 +1006,7 @@ namespace Microsoft.OData
             }
 
             EdmTypeKind targetTypeKind;
-            if (expectedTypeKind != EdmTypeKind.None)
+            if (expectedTypeKind != EdmTypeKind.None && expectedTypeKind != EdmTypeKind.Untyped)
             {
                 // If we have an expected type, use that.
                 targetTypeKind = expectedTypeKind;
@@ -1115,7 +1118,11 @@ namespace Microsoft.OData
                 {
                     if (isDynamicProperty != true)
                     {
-                        ThrowNullValueForNonNullableTypeException(expectedValueTypeReference, propertyName);
+                        if (!expectedValueTypeReference.IsNullable)
+                        {
+                            ThrowNullValueForNonNullableTypeException(expectedValueTypeReference, propertyName);
+                        }
+                        ThrowNullValueForNullableTypeException(expectedValueTypeReference, propertyName);
                     }
                 }
                 else if (expectedValueTypeReference.IsODataComplexTypeKind())
@@ -1149,6 +1156,21 @@ namespace Microsoft.OData
             }
 
             throw new ODataException(Strings.ReaderValidationUtils_NullNamedValueForNonNullableType(propertyName, expectedValueTypeReference.FullName()));
+        }
+
+        /// <summary>
+        /// Create and throw exception that a null value was found when the expected type is non-nullable.
+        /// </summary>
+        /// <param name="expectedValueTypeReference">The expected type for this value.</param>
+        /// <param name="propertyName">The name of the property whose value is being read, if applicable.</param>
+        private static void ThrowNullValueForNullableTypeException(IEdmTypeReference expectedValueTypeReference, string propertyName)
+        {
+            if (string.IsNullOrEmpty(propertyName))
+            {
+                throw new ODataException(Strings.ReaderValidationUtils_NullValueForNullableType(expectedValueTypeReference.FullName()));
+            }
+
+            throw new ODataException(Strings.ReaderValidationUtils_NullNamedValueForNullableType(propertyName, expectedValueTypeReference.FullName()));
         }
 
 

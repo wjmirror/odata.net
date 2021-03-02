@@ -1180,7 +1180,7 @@ namespace Microsoft.OData.Tests.IntegrationTests.Evaluation
 
             // #2
             nestedResource = nestedResources.First(c => c.TypeName == "NS.Customer");
-            Assert.Equal(1, nestedResource.Properties.Count());
+            Assert.Single(nestedResource.Properties);
             Assert.Equal(42, nestedResource.Properties.First(p => p.Name == "Id").Value);
         }
 
@@ -1606,7 +1606,7 @@ namespace Microsoft.OData.Tests.IntegrationTests.Evaluation
 
             string result = this.GetWriterOutputForContentTypeAndKnobValue("application/json;odata.metadata=full", true, itemsToWrite, Model, containedEntitySet, DerivedType, null, null, "EntitySet(0)/Namespace.DerivedType/ContainedNonCollectionNavProp");
 
-            Uri containedId = new Uri("http://example.com/EntitySet(0)/ContainedNonCollectionNavProp");
+            Uri containedId = new Uri("http://example.com/EntitySet(0)/Namespace.DerivedType/ContainedNonCollectionNavProp");
             Assert.Equal(containedId, this.derivedEntry.Id);
         }
 

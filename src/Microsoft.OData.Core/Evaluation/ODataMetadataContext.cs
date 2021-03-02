@@ -78,11 +78,6 @@ namespace Microsoft.OData.Evaluation
         private readonly EdmTypeResolver edmTypeResolver;
 
         /// <summary>
-        /// Cache of operations that are bindable to entity types.
-        /// </summary>
-        private readonly Dictionary<IEdmType, IList<IEdmOperation>> bindableOperationsCache;
-
-        /// <summary>
         /// true if we are reading or writing a response payload, false otherwise.
         /// </summary>
         private readonly bool isResponse;
@@ -150,8 +145,7 @@ namespace Microsoft.OData.Evaluation
             this.operationsBoundToStructuredTypeMustBeContainerQualified = operationsBoundToStructuredTypeMustBeContainerQualified ?? EdmLibraryExtensions.OperationsBoundToStructuredTypeMustBeContainerQualified;
             this.edmTypeResolver = edmTypeResolver;
             this.model = model;
-            this.metadataDocumentUri = metadataDocumentUri;
-            this.bindableOperationsCache = new Dictionary<IEdmType, IList<IEdmOperation>>(ReferenceEqualityComparer<IEdmType>.Instance);
+            this.metadataDocumentUri = metadataDocumentUri;            
             this.odataUri = odataUri;
         }
 
@@ -244,7 +238,7 @@ namespace Microsoft.OData.Evaluation
             if (resourceState.MetadataBuilder == null)
             {
                 ODataResourceBase resource = resourceState.Resource;
-                if (this.isResponse && !isDelta)
+                if (this.isResponse || (isDelta && this.metadataDocumentUri != null))
                 {
                     ODataTypeAnnotation typeAnnotation = resource.TypeAnnotation;
 
@@ -275,18 +269,32 @@ namespace Microsoft.OData.Evaluation
                         ODataResourceTypeContext.Create( /*serializationInfo*/
                             null, navigationSource, navigationSourceElementType, resourceState.ResourceTypeFromMetadata ?? resourceState.ResourceType,
                             /*throwIfMissingTypeInfo*/ true);
-                    IODataResourceMetadataContext resourceMetadataContext = ODataResourceMetadataContext.Create(resource, typeContext, /*serializationInfo*/null, structuredType, this, resourceState.SelectedProperties, null);
+
+                    IODataResourceMetadataContext resourceMetadataContext = ODataResourceMetadataContext.Create(
+                        resource,
+                        typeContext,
+                        /*serializationInfo*/null,
+                        structuredType,
+                        this,
+                        resourceState.SelectedProperties,
+                        null,
+                        /*requiresId*/ (this.isResponse || !isDelta || resource is ODataDeletedResource) // id is required except for non-deleted resource in delta request
+                        );
 
                     ODataConventionalUriBuilder uriBuilder = new ODataConventionalUriBuilder(this.ServiceBaseUri,
                         useKeyAsSegment ? ODataUrlKeyDelimiter.Slash : ODataUrlKeyDelimiter.Parentheses);
 
                     if (structuredType.IsODataEntityTypeKind())
                     {
-                        resourceState.MetadataBuilder = new ODataConventionalEntityMetadataBuilder(resourceMetadataContext, this, uriBuilder);
+                        resourceState.MetadataBuilder = isDelta ?
+                            new ODataConventionalIdMetadataBuilder(resourceMetadataContext, this, uriBuilder) :
+                            new ODataConventionalEntityMetadataBuilder(resourceMetadataContext, this, uriBuilder);
                     }
                     else
                     {
-                        resourceState.MetadataBuilder = new ODataConventionalResourceMetadataBuilder(resourceMetadataContext, this, uriBuilder);
+                        resourceState.MetadataBuilder = isDelta ?
+                            resourceState.MetadataBuilder = new NoOpResourceMetadataBuilder(resource) :
+                            new ODataConventionalResourceMetadataBuilder(resourceMetadataContext, this, uriBuilder);
                     }
                 }
                 else
@@ -305,18 +313,10 @@ namespace Microsoft.OData.Evaluation
         /// <returns>The list of operations that are always bindable to a type.</returns>
         public IEnumerable<IEdmOperation> GetBindableOperationsForType(IEdmType bindingType)
         {
-            Debug.Assert(bindingType != null, "bindingType != null");
-            Debug.Assert(this.bindableOperationsCache != null, "this.bindableOperationsCache != null");
+            Debug.Assert(bindingType != null, "bindingType != null");            
             Debug.Assert(this.isResponse, "this.readingResponse");
 
-            IList<IEdmOperation> bindableOperations;
-            if (!this.bindableOperationsCache.TryGetValue(bindingType, out bindableOperations))
-            {
-                bindableOperations = MetadataUtils.CalculateBindableOperationsForType(bindingType, this.model, this.edmTypeResolver);
-                this.bindableOperationsCache.Add(bindingType, bindableOperations);
-            }
-
-            return bindableOperations;
+            return MetadataUtils.CalculateBindableOperationsForType(bindingType, this.model, this.edmTypeResolver);
         }
 
         /// <summary>

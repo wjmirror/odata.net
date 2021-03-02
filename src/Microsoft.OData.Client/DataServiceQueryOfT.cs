@@ -13,6 +13,7 @@ namespace Microsoft.OData.Client
     using System.Linq;
     using System.Linq.Expressions;
     using System.Reflection;
+    using System.Threading;
     using System.Threading.Tasks;
 
     /// <summary>
@@ -219,7 +220,15 @@ namespace Microsoft.OData.Client
         /// <returns>A task that represents an <see cref="System.Collections.Generic.IEnumerable{T}" />  that contains the results of the query operation.</returns>
         public virtual new Task<IEnumerable<TElement>> ExecuteAsync()
         {
-            return Task<IEnumerable<TElement>>.Factory.FromAsync(this.BeginExecute, this.EndExecute, null);
+            return ExecuteAsync(CancellationToken.None);
+        }
+
+        /// <summary>Starts an asynchronous network operation that executes the query represented by this object instance.</summary>
+        /// <returns>A task that represents an <see cref="System.Collections.Generic.IEnumerable{T}" />  that contains the results of the query operation.</returns>
+        /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
+        public virtual new Task<IEnumerable<TElement>> ExecuteAsync(CancellationToken cancellationToken)
+        {
+            return this.Context.FromAsync(this.BeginExecute, this.EndExecute, cancellationToken);
         }
 
         /// <summary>Ends an asynchronous query request to a data service.</summary>
@@ -244,12 +253,21 @@ namespace Microsoft.OData.Client
         /// <returns>A task that represents an <see cref="System.Collections.Generic.IEnumerable{T}" /> that contains the results of the query operation.</returns>
         public virtual Task<IEnumerable<TElement>> GetAllPagesAsync()
         {
-            var currentTask = Task<IEnumerable<TElement>>.Factory.FromAsync(this.BeginExecute, this.EndExecute, null);
-            var nextTask = currentTask.ContinueWith(t => this.ContinuePage(t.Result));
+            return GetAllPagesAsync(CancellationToken.None);
+        }
+
+        /// <summary>
+        /// Asynchronously sends a request to get all items by auto iterating all pages
+        /// </summary>
+        /// <returns>A task that represents an <see cref="System.Collections.Generic.IEnumerable{T}" /> that contains the results of the query operation.</returns>
+        /// <param name="cancellationToken">The token to monitor for cancellation requests.</param>
+        public virtual Task<IEnumerable<TElement>> GetAllPagesAsync(CancellationToken cancellationToken)
+        {
+            var currentTask = this.Context.FromAsync(this.BeginExecute, this.EndExecute, cancellationToken);
+            var nextTask = currentTask.ContinueWith(t => this.ContinuePage(t.Result, cancellationToken), cancellationToken);
             return nextTask;
         }
 
-#if !PORTABLELIB // Synchronous methods not available
         /// <summary>Executes the query and returns the results as a collection that implements IEnumerable.</summary>
         /// <returns>An <see cref="System.Collections.Generic.IEnumerable{T}" /> in which TElement represents the type of the query results.</returns>
         /// <exception cref="Microsoft.OData.Client.DataServiceQueryException">When the data service returns an HTTP 404: Resource Not Found error.</exception>
@@ -275,7 +293,6 @@ namespace Microsoft.OData.Client
             QueryOperationResponse<TElement> response = this.Execute<TElement>(this.Context, this.Translate());
             return this.GetRestPages(response);
         }
-#endif
 
         /// <summary>Expands a query to include entities from a related entity set in the query response.</summary>
         /// <returns>A new query that includes the requested $expand query option appended to the URI of the supplied query.</returns>
@@ -367,17 +384,10 @@ namespace Microsoft.OData.Client
 
         /// <summary>Executes the query and returns the results as a collection.</summary>
         /// <returns>A typed enumerator over the results in which TElement represents the type of the query results.</returns>
-#if !PORTABLELIB // Synchronous methods not available
         public virtual IEnumerator<TElement> GetEnumerator()
         {
             return this.Execute().GetEnumerator();
         }
-#else
-        public IEnumerator<TElement> GetEnumerator()
-        {
-            throw Error.NotSupported(Strings.DataServiceQuery_EnumerationNotSupported);
-        }
-#endif
 
         /// <summary>Represents the URI of the query to the data service.</summary>
         /// <returns>A URI as string that represents the query to the data service for this <see cref="Microsoft.OData.Client.DataServiceQuery{TElement}" /> instance.</returns>
@@ -395,13 +405,9 @@ namespace Microsoft.OData.Client
 
         /// <summary>Executes the query and returns the results as a collection.</summary>
         /// <returns>An enumerator over the query results.</returns>
-        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
+        IEnumerator System.Collections.IEnumerable.GetEnumerator()
         {
-#if !PORTABLELIB // Synchronous methods not available
             return this.GetEnumerator();
-#else
-            throw Error.NotSupported();
-#endif
         }
 
         /// <summary>
@@ -414,7 +420,6 @@ namespace Microsoft.OData.Client
             return this.Translate();
         }
 
-#if !PORTABLELIB
         /// Synchronous methods not available
         /// <summary>
         /// Returns an IEnumerable from an Internet resource.
@@ -424,7 +429,6 @@ namespace Microsoft.OData.Client
         {
             return this.Execute();
         }
-#endif
 
         /// <summary>
         /// Begins an asynchronous request to an Internet resource.
@@ -466,7 +470,7 @@ namespace Microsoft.OData.Client
         /// </summary>
         /// <param name="response">The response of the previous page</param>
         /// <returns>The items retrieved</returns>
-        private IEnumerable<TElement> ContinuePage(IEnumerable<TElement> response)
+        private IEnumerable<TElement> ContinuePage(IEnumerable<TElement> response, CancellationToken cancellationToken)
         {
             foreach (var element in response)
             {
@@ -476,9 +480,11 @@ namespace Microsoft.OData.Client
             var continuation = (response as QueryOperationResponse).GetContinuation() as DataServiceQueryContinuation<TElement>;
             if (continuation != null)
             {
-                var currentTask = Task<IEnumerable<TElement>>.Factory.FromAsync(this.Context.BeginExecute(continuation, null, null), this.Context.EndExecute<TElement>);
-                var nextTask = currentTask.ContinueWith(t => this.ContinuePage(t.Result));
-                nextTask.Wait();
+                var asyncResult = this.Context.BeginExecute(continuation, null, null);
+                cancellationToken.Register(() => this.Context.CancelRequest(asyncResult));
+                var currentTask = Task<IEnumerable<TElement>>.Factory.FromAsync(asyncResult, this.Context.EndExecute<TElement>);
+                var nextTask = currentTask.ContinueWith(t => ContinuePage(t.Result, cancellationToken), cancellationToken);
+                nextTask.Wait(cancellationToken);
                 foreach (var element in nextTask.Result)
                 {
                     yield return element;
@@ -486,7 +492,6 @@ namespace Microsoft.OData.Client
             }
         }
 
-#if !PORTABLELIB
         /// Synchronous methods not available
         /// <summary>
         /// Returns an IEnumerable from an Internet resource.
@@ -512,7 +517,6 @@ namespace Microsoft.OData.Client
                 continuation = (response as QueryOperationResponse<TElement>).GetContinuation();
             }
         }
-#endif
 
         /// <summary>
         /// Ordered DataServiceQuery which implements IOrderedQueryable.

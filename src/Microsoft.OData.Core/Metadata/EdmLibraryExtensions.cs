@@ -1459,7 +1459,7 @@ namespace Microsoft.OData.Metadata
         {
             Debug.Assert(containerElement != null, "containerElement != null");
 
-            return containerElement.Container.Name + "." + containerElement.Name;
+            return string.Concat(containerElement.Container.Name, ".", containerElement.Name);
         }
 
 #if !ODATA_CLIENT
@@ -1588,7 +1588,7 @@ namespace Microsoft.OData.Metadata
                     IEdmStructuredType untypedType = type as IEdmStructuredType;
                     if (untypedType != null)
                     {
-                        return new EdmUntypedStructuredTypeReference(untypedType);
+                        return new EdmUntypedStructuredTypeReference(untypedType, nullable);
                     }
 
                     return new EdmUntypedTypeReference((IEdmUntypedType)type);

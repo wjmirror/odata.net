@@ -6,12 +6,12 @@
 
 namespace Microsoft.Test.OData.Tests.Client.AsynchronousTests
 {
+    using System;
     using System.Collections.Generic;
-    using System.Net;
-    using System.Threading;
-    using System.Threading.Tasks;
-    using Microsoft.OData.Client;
     using System.Linq;
+    using System.Net;
+    using System.Reflection;
+    using Microsoft.OData.Client;
 #if SILVERLIGHT
     using Microsoft.Silverlight.Testing;
 #endif
@@ -294,25 +294,28 @@ namespace Microsoft.Test.OData.Tests.Client.AsynchronousTests
             this.EnqueueTestComplete();
         }
 
-#if !PORTABLELIB && !NETCOREAPP1_0
         /// <summary>
         /// CancelRequest for Batch Requests
         /// </summary>
-        // github issuse: #896
-        // [Fact, Asynchronous]
+        [Fact, Asynchronous]
         public void CancelBatchRequestTest()
         {
-            var context = this.CreateWrappedContext<DefaultContainer>().Context;
+            DefaultContainer context = this.CreateWrappedContext<DefaultContainer>().Context;
             ServicePoint servicePoint = null;
             context.SendingRequest2 += ((sender, args) =>
             {
-                if (args.RequestMessage is HttpWebRequestMessage)
+                servicePoint = ServicePointManager.FindServicePoint(args.RequestMessage.Url);
+                MethodInfo releaseConns = servicePoint.GetType().GetMethod
+                        ("ReleaseAllConnectionGroups",
+                        BindingFlags.Instance | BindingFlags.NonPublic);
+                releaseConns.Invoke(servicePoint, null);
+                if (args.RequestMessage is HttpClientRequestMessage)
                 {
-                    servicePoint = ((HttpWebRequestMessage)args.RequestMessage).HttpWebRequest.ServicePoint;
+                    servicePoint = ServicePointManager.FindServicePoint(args.RequestMessage.Url);
                 }
             });
 
-            var arBatch = context.BeginExecuteBatch(
+            IAsyncResult arBatch = context.BeginExecuteBatch(
                 null,
                 null,
                 new DataServiceRequest[]
@@ -320,11 +323,11 @@ namespace Microsoft.Test.OData.Tests.Client.AsynchronousTests
                     new DataServiceRequest<Customer>(((from c in context.Customer where c.CustomerId == -8 select c) as DataServiceQuery<Customer>).RequestUri),
                     new DataServiceRequest<Customer>(((from c in context.Customer where c.CustomerId == -6 select c) as DataServiceQuery<Customer>).RequestUri),
                 });
+
             Assert.Equal(1, servicePoint.CurrentConnections);
             context.CancelRequest(arBatch);
             Assert.Equal(0, servicePoint.CurrentConnections);
         }
-#endif
 
         /// <summary>
         /// Query Entity Set
@@ -1301,6 +1304,33 @@ namespace Microsoft.Test.OData.Tests.Client.AsynchronousTests
                 null);
 
             this.WaitForTestToComplete();
+        }
+
+        /// <summary>
+        /// When DataServiceContext.KeyComparisonGeneratesFilterQuery=true, An expression that compares only the key property, will generate a $filter query option.
+        /// </summary>
+        [Fact]
+        public void Linq_Where_Generates_Filter_When_KeyComparisonGeneratesFilterQuery_Is_True()
+        {
+            var context = this.CreateWrappedContext<DefaultContainer>().Context;
+            context.KeyComparisonGeneratesFilterQuery = true;
+            var query = context.Customer.Where(c => c.CustomerId == -10);
+            var uri = query.ToString();
+            Assert.EndsWith("$filter=CustomerId eq -10", uri);
+        }
+
+        /// <summary>
+        /// When DataServiceContext.KeyComparisonGeneratesFilterQuery=false, An expression that compares only the key property, should create a ByKey Uri.
+        /// </summary>
+        [Fact]
+        public void Linq_Where_Generates_ByKey_When_KeyComparisonGeneratesFilterQuery_Is_False()
+        {
+            var context = this.CreateWrappedContext<DefaultContainer>().Context;
+            // By default context.KeyComparisonGeneratesFilterQuery = false;
+            // So we don't need to set it
+            var query = context.Customer.Where(c => c.CustomerId == -10);
+            var uri = query.ToString();
+            Assert.EndsWith("Customer(-10)", uri);
         }
 
         /// <summary>

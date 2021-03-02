@@ -2529,6 +2529,7 @@ public class Microsoft.OData.Edm.EdmCoreModel : Microsoft.OData.Edm.EdmElement, 
     public Microsoft.OData.Edm.IEdmTemporalTypeReference GetTemporal (Microsoft.OData.Edm.EdmPrimitiveTypeKind kind, System.Nullable`1[[System.Int32]] precision, bool isNullable)
     public Microsoft.OData.Edm.IEdmTemporalTypeReference GetTimeOfDay (bool isNullable)
     public Microsoft.OData.Edm.IEdmUntypedTypeReference GetUntyped ()
+    public Microsoft.OData.Edm.IEdmUntypedTypeReference GetUntyped (bool isNullable)
     public Microsoft.OData.Edm.IEdmUntypedType GetUntypedType ()
 }
 
@@ -2837,6 +2838,7 @@ public class Microsoft.OData.Edm.EdmUntypedStructuredTypeReference : Microsoft.O
 
 public class Microsoft.OData.Edm.EdmUntypedTypeReference : Microsoft.OData.Edm.EdmTypeReference, IEdmElement, IEdmTypeReference, IEdmUntypedTypeReference {
     public EdmUntypedTypeReference (Microsoft.OData.Edm.IEdmUntypedType definition)
+    public EdmUntypedTypeReference (Microsoft.OData.Edm.IEdmUntypedType definition, bool isNullable)
 }
 
 public sealed class Microsoft.OData.Edm.EdmNavigationProperty : Microsoft.OData.Edm.EdmProperty, IEdmElement, IEdmNamedElement, IEdmNavigationProperty, IEdmProperty, IEdmVocabularyAnnotatable {
@@ -2884,6 +2886,10 @@ public enum Microsoft.OData.Edm.Csdl.CsdlTarget : int {
 public enum Microsoft.OData.Edm.Csdl.EdmVocabularyAnnotationSerializationLocation : int {
     Inline = 0
     OutOfLine = 1
+}
+
+public abstract class Microsoft.OData.Edm.Csdl.CsdlReaderSettingsBase {
+    protected CsdlReaderSettingsBase ()
 }
 
 public sealed class Microsoft.OData.Edm.Csdl.CsdlConstants {
@@ -3029,7 +3035,7 @@ public class Microsoft.OData.Edm.Csdl.EdmParseException : System.Exception, ISer
     System.Collections.ObjectModel.ReadOnlyCollection`1[[Microsoft.OData.Edm.Validation.EdmError]] Errors  { public get; }
 }
 
-public sealed class Microsoft.OData.Edm.Csdl.CsdlReaderSettings {
+public sealed class Microsoft.OData.Edm.Csdl.CsdlReaderSettings : Microsoft.OData.Edm.Csdl.CsdlReaderSettingsBase {
     public CsdlReaderSettings ()
 
     System.Func`2[[System.Uri],[System.Xml.XmlReader]] GetReferencedModelReaderFunc  { public get; public set; }
@@ -4091,11 +4097,19 @@ public sealed class Microsoft.OData.Edm.Vocabularies.TryGetClrTypeName : System.
     public virtual bool Invoke (Microsoft.OData.Edm.IEdmModel edmModel, string edmTypeName, out System.String& clrTypeName)
 }
 
+public sealed class Microsoft.OData.Edm.Vocabularies.V1.AuthorizationVocabularyModel {
+    public static readonly Microsoft.OData.Edm.IEdmModel Instance = Microsoft.OData.Edm.Csdl.CsdlSemantics.CsdlSemanticsModel
+}
+
 public sealed class Microsoft.OData.Edm.Vocabularies.V1.CapabilitiesVocabularyConstants {
     public static string ChangeTracking = "Org.OData.Capabilities.V1.ChangeTracking"
     public static string ChangeTrackingExpandableProperties = "ExpandableProperties"
     public static string ChangeTrackingFilterableProperties = "FilterableProperties"
     public static string ChangeTrackingSupported = "Supported"
+}
+
+public sealed class Microsoft.OData.Edm.Vocabularies.V1.CapabilitiesVocabularyModel {
+    public static readonly Microsoft.OData.Edm.IEdmModel Instance = Microsoft.OData.Edm.Csdl.CsdlSemantics.CsdlSemanticsModel
 }
 
 public sealed class Microsoft.OData.Edm.Vocabularies.V1.CoreVocabularyConstants {
@@ -4137,6 +4151,7 @@ public sealed class Microsoft.OData.Edm.Vocabularies.V1.CoreVocabularyModel {
     public static readonly Microsoft.OData.Edm.Vocabularies.IEdmTerm PermissionsTerm = Microsoft.OData.Edm.Csdl.CsdlSemantics.CsdlSemanticsTerm
     public static readonly Microsoft.OData.Edm.Vocabularies.IEdmTerm RequiresTypeTerm = Microsoft.OData.Edm.Csdl.CsdlSemantics.CsdlSemanticsTerm
     public static readonly Microsoft.OData.Edm.Vocabularies.IEdmTerm ResourcePathTerm = Microsoft.OData.Edm.Csdl.CsdlSemantics.CsdlSemanticsTerm
+    public static readonly Microsoft.OData.Edm.Vocabularies.IEdmTerm RevisionsTerm = Microsoft.OData.Edm.Csdl.CsdlSemantics.CsdlSemanticsTerm
 }
 
 public sealed class Microsoft.OData.Edm.Vocabularies.V1.ValidationVocabularyModel {
@@ -4157,6 +4172,10 @@ public sealed class Microsoft.OData.Edm.Vocabularies.Community.V1.AlternateKeysV
 public sealed class Microsoft.OData.Edm.Vocabularies.Community.V1.CommunityVocabularyModel {
     public static readonly Microsoft.OData.Edm.IEdmModel Instance = Microsoft.OData.Edm.Csdl.CsdlSemantics.CsdlSemanticsModel
     public static readonly Microsoft.OData.Edm.Vocabularies.IEdmTerm UrlEscapeFunctionTerm = Microsoft.OData.Edm.Csdl.CsdlSemantics.CsdlSemanticsTerm
+}
+
+public sealed class Microsoft.OData.Edm.Vocabularies.Measures.V1.MeasuresVocabularyModel {
+    public static readonly Microsoft.OData.Edm.IEdmModel Instance = Microsoft.OData.Edm.Csdl.CsdlSemantics.CsdlSemanticsModel
 }
 
 >>>Microsoft.OData.Core
@@ -4381,6 +4400,7 @@ public abstract class Microsoft.OData.ODataBatchReader : IODataStreamListener {
     protected abstract Microsoft.OData.ODataBatchReaderState ReadAtOperationImplementation ()
     protected abstract Microsoft.OData.ODataBatchReaderState ReadAtStartImplementation ()
     protected void ThrowODataException (string errorMessage)
+    protected abstract void ValidateDependsOnIds (string contentId, System.Collections.Generic.IEnumerable`1[[System.String]] dependsOnIds)
 }
 
 public abstract class Microsoft.OData.ODataBatchWriter : IODataOutputInStreamErrorListener, IODataStreamListener {
@@ -4410,6 +4430,7 @@ public abstract class Microsoft.OData.ODataBatchWriter : IODataOutputInStreamErr
     public abstract void StreamDisposed ()
     public abstract void StreamRequested ()
     public abstract System.Threading.Tasks.Task StreamRequestedAsync ()
+    protected abstract void ValidateDependsOnIds (string contentId, System.Collections.Generic.IEnumerable`1[[System.String]] dependsOnIds)
     protected abstract void VerifyNotDisposed ()
     public void WriteEndBatch ()
     public System.Threading.Tasks.Task WriteEndBatchAsync ()
@@ -4546,6 +4567,8 @@ public abstract class Microsoft.OData.ODataInputContext : IDisposable {
     internal virtual System.Threading.Tasks.Task`1[[Microsoft.OData.ODataEntityReferenceLinks]] ReadEntityReferenceLinksAsync ()
     public virtual Microsoft.OData.ODataError ReadError ()
     public virtual System.Threading.Tasks.Task`1[[Microsoft.OData.ODataError]] ReadErrorAsync ()
+    internal virtual Microsoft.OData.Edm.IEdmModel ReadMetadataDocument ()
+    internal virtual Microsoft.OData.Edm.IEdmModel ReadMetadataDocument (Microsoft.OData.Edm.Csdl.CsdlReaderSettingsBase csdlReaderSettings)
     internal virtual Microsoft.OData.Edm.IEdmModel ReadMetadataDocument (System.Func`2[[System.Uri],[System.Xml.XmlReader]] getReferencedModelReaderFunc)
     public virtual Microsoft.OData.ODataProperty ReadProperty (Microsoft.OData.Edm.IEdmStructuralProperty edmStructuralProperty, Microsoft.OData.Edm.IEdmTypeReference expectedPropertyTypeReference)
     public virtual System.Threading.Tasks.Task`1[[Microsoft.OData.ODataProperty]] ReadPropertyAsync (Microsoft.OData.Edm.IEdmStructuralProperty edmStructuralProperty, Microsoft.OData.Edm.IEdmTypeReference expectedPropertyTypeReference)
@@ -5354,6 +5377,7 @@ public sealed class Microsoft.OData.ODataMessageReader : IDisposable {
     public Microsoft.OData.ODataError ReadError ()
     public System.Threading.Tasks.Task`1[[Microsoft.OData.ODataError]] ReadErrorAsync ()
     public Microsoft.OData.Edm.IEdmModel ReadMetadataDocument ()
+    public Microsoft.OData.Edm.IEdmModel ReadMetadataDocument (Microsoft.OData.Edm.Csdl.CsdlReaderSettingsBase csdlReaderSettings)
     public Microsoft.OData.Edm.IEdmModel ReadMetadataDocument (System.Func`2[[System.Uri],[System.Xml.XmlReader]] getReferencedModelReaderFunc)
     public Microsoft.OData.ODataProperty ReadProperty ()
     public Microsoft.OData.ODataProperty ReadProperty (Microsoft.OData.Edm.IEdmStructuralProperty property)
@@ -5459,6 +5483,7 @@ public sealed class Microsoft.OData.ODataMessageWriter : IDisposable {
 public sealed class Microsoft.OData.ODataMessageWriterSettings {
     public ODataMessageWriterSettings ()
 
+    bool AlwaysAddTypeAnnotationsForDerivedTypes  { public get; public set; }
     Microsoft.OData.Buffers.ICharArrayPool ArrayPool  { public get; public set; }
     System.Uri BaseUri  { public get; public set; }
     bool EnableCharactersCheck  { public get; public set; }
@@ -5467,6 +5492,7 @@ public sealed class Microsoft.OData.ODataMessageWriterSettings {
     Microsoft.OData.ODataLibraryCompatibility LibraryCompatibility  { public get; public set; }
     Microsoft.OData.ODataMessageQuotas MessageQuotas  { public get; public set; }
     Microsoft.OData.Evaluation.ODataMetadataSelector MetadataSelector  { public get; public set; }
+    string MultipartNewLine  { public get; public set; }
     Microsoft.OData.ODataUri ODataUri  { public get; public set; }
     Microsoft.OData.ValidationKinds Validations  { public get; public set; }
     System.Nullable`1[[Microsoft.OData.ODataVersion]] Version  { public get; public set; }
@@ -5702,6 +5728,9 @@ public interface Microsoft.OData.Json.IJsonStreamReader : IJsonReader {
     System.IO.TextReader CreateTextReader ()
 }
 
+[
+CLSCompliantAttribute(),
+]
 public interface Microsoft.OData.Json.IJsonStreamWriter : IJsonWriter {
     void EndStreamValueScope ()
     void EndTextWriterValueScope ()
@@ -5709,6 +5738,9 @@ public interface Microsoft.OData.Json.IJsonStreamWriter : IJsonWriter {
     System.IO.TextWriter StartTextWriterValueScope (string contentType)
 }
 
+[
+CLSCompliantAttribute(),
+]
 public interface Microsoft.OData.Json.IJsonWriter {
     void EndArrayScope ()
     void EndObjectScope ()
@@ -5738,10 +5770,16 @@ public interface Microsoft.OData.Json.IJsonWriter {
     void WriteValue (System.TimeSpan value)
 }
 
+[
+CLSCompliantAttribute(),
+]
 public interface Microsoft.OData.Json.IJsonWriterFactory {
     Microsoft.OData.Json.IJsonWriter CreateJsonWriter (System.IO.TextWriter textWriter, bool isIeee754Compatible)
 }
 
+[
+CLSCompliantAttribute(),
+]
 public sealed class Microsoft.OData.Json.DefaultJsonWriterFactory : IJsonWriterFactory {
     public DefaultJsonWriterFactory ()
     public DefaultJsonWriterFactory (Microsoft.OData.Json.ODataStringEscapeOption stringEscapeOption)
@@ -6919,6 +6957,7 @@ public sealed class Microsoft.OData.UriParser.ODataUriParser {
     public System.Nullable`1[[System.Int64]] ParseTop ()
     public Microsoft.OData.ODataUri ParseUri ()
     public bool Validate (Microsoft.OData.UriParser.Validation.ODataUrlValidationRuleSet rules, out System.Collections.Generic.IEnumerable`1[[Microsoft.OData.UriParser.Validation.ODataUrlValidationMessage]]& validationMessages)
+    public bool Validate (Microsoft.OData.UriParser.Validation.ODataUrlValidator validator, out System.Collections.Generic.IEnumerable`1[[Microsoft.OData.UriParser.Validation.ODataUrlValidationMessage]]& validationMessages)
 }
 
 public sealed class Microsoft.OData.UriParser.ODataUriParserSettings {
@@ -7563,6 +7602,12 @@ public sealed class Microsoft.OData.UriParser.Validation.ODataUrlValidationRuleS
     public ODataUrlValidationRuleSet (System.Collections.Generic.IEnumerable`1[[Microsoft.OData.UriParser.Validation.ODataUrlValidationRule]] rules)
 }
 
+public sealed class Microsoft.OData.UriParser.Validation.ODataUrlValidator {
+    public ODataUrlValidator (Microsoft.OData.Edm.IEdmModel model, Microsoft.OData.UriParser.Validation.ODataUrlValidationRuleSet rules)
+
+    public bool ValidateUrl (Microsoft.OData.ODataUri odataUri, out System.Collections.Generic.IEnumerable`1[[Microsoft.OData.UriParser.Validation.ODataUrlValidationMessage]]& validationMessages)
+}
+
 >>>Microsoft.OData.Client
 public enum Microsoft.OData.Client.DataServiceResponsePreference : int {
     IncludeContent = 1
@@ -7584,6 +7629,11 @@ public enum Microsoft.OData.Client.EntityStates : int {
     Detached = 1
     Modified = 16
     Unchanged = 2
+}
+
+public enum Microsoft.OData.Client.HttpRequestTransportMode : int {
+    HttpClient = 1
+    HttpWebRequest = 0
 }
 
 public enum Microsoft.OData.Client.MergeOption : int {
@@ -7709,6 +7759,31 @@ public abstract class Microsoft.OData.Client.OperationResponse {
     int StatusCode  { public get; }
 }
 
+[
+ExtensionAttribute(),
+]
+public sealed class Microsoft.OData.Client.DataServiceExtensions {
+    [
+    ExtensionAttribute(),
+    ]
+    public static int CountDistinct (IEnumerable`1 source, Func`2 selector)
+
+    [
+    ExtensionAttribute(),
+    ]
+    public static int CountDistinct (IQueryable`1 source, Expression`1 selector)
+}
+
+[
+ExtensionAttribute(),
+]
+public sealed class Microsoft.OData.Client.TaskExtensionMethods {
+    [
+    ExtensionAttribute(),
+    ]
+    public static Task`1 ToApm (Task`1 task, System.AsyncCallback callback, object state)
+}
+
 public sealed class Microsoft.OData.Client.Utility {
     public static System.Collections.Generic.IEnumerable`1[[System.Object]] GetCustomAttributes (System.Type type, System.Type attributeType, bool inherit)
 }
@@ -7819,7 +7894,9 @@ public class Microsoft.OData.Client.DataServiceContext {
     Microsoft.OData.Client.EntityParameterSendOption EntityParameterSendOption  { public virtual get; public virtual set; }
     Microsoft.OData.Client.EntityTracker EntityTracker  { public virtual get; public virtual set; }
     Microsoft.OData.Client.DataServiceClientFormat Format  { public virtual get; }
+    Microsoft.OData.Client.HttpRequestTransportMode HttpRequestTransportMode  { public get; public set; }
     bool IgnoreResourceNotFoundException  { public virtual get; public virtual set; }
+    bool KeyComparisonGeneratesFilterQuery  { public virtual get; public virtual set; }
     System.Collections.ObjectModel.ReadOnlyCollection`1[[Microsoft.OData.Client.LinkDescriptor]] Links  { public virtual get; }
     Microsoft.OData.Client.ODataProtocolVersion MaxProtocolVersion  { public virtual get; }
     Microsoft.OData.Client.MergeOption MergeOption  { public virtual get; public virtual set; }
@@ -7882,13 +7959,20 @@ public class Microsoft.OData.Client.DataServiceContext {
     public virtual IEnumerable`1 Execute (System.Uri requestUri, string httpMethod, bool singleResult, Microsoft.OData.Client.OperationParameter[] operationParameters)
     public virtual Task`1 ExecuteAsync (DataServiceQueryContinuation`1 continuation)
     public virtual Task`1 ExecuteAsync (System.Uri requestUri)
+    public virtual Task`1 ExecuteAsync (DataServiceQueryContinuation`1 continuation, System.Threading.CancellationToken cancellationToken)
+    public virtual Task`1 ExecuteAsync (System.Uri requestUri, System.Threading.CancellationToken cancellationToken)
     public virtual System.Threading.Tasks.Task`1[[Microsoft.OData.Client.OperationResponse]] ExecuteAsync (System.Uri requestUri, string httpMethod, Microsoft.OData.Client.OperationParameter[] operationParameters)
     public virtual Task`1 ExecuteAsync (System.Uri requestUri, string httpMethod, Microsoft.OData.Client.OperationParameter[] operationParameters)
     public virtual Task`1 ExecuteAsync (System.Uri requestUri, string httpMethod, bool singleResult, Microsoft.OData.Client.OperationParameter[] operationParameters)
+    public virtual System.Threading.Tasks.Task`1[[Microsoft.OData.Client.OperationResponse]] ExecuteAsync (System.Uri requestUri, string httpMethod, System.Threading.CancellationToken cancellationToken, Microsoft.OData.Client.OperationParameter[] operationParameters)
+    public virtual Task`1 ExecuteAsync (System.Uri requestUri, string httpMethod, System.Threading.CancellationToken cancellationToken, Microsoft.OData.Client.OperationParameter[] operationParameters)
+    public virtual Task`1 ExecuteAsync (System.Uri requestUri, string httpMethod, bool singleResult, System.Threading.CancellationToken cancellationToken, Microsoft.OData.Client.OperationParameter[] operationParameters)
     public virtual Microsoft.OData.Client.DataServiceResponse ExecuteBatch (Microsoft.OData.Client.DataServiceRequest[] queries)
     public virtual Microsoft.OData.Client.DataServiceResponse ExecuteBatch (Microsoft.OData.Client.SaveChangesOptions options, Microsoft.OData.Client.DataServiceRequest[] queries)
     public virtual System.Threading.Tasks.Task`1[[Microsoft.OData.Client.DataServiceResponse]] ExecuteBatchAsync (Microsoft.OData.Client.DataServiceRequest[] queries)
     public virtual System.Threading.Tasks.Task`1[[Microsoft.OData.Client.DataServiceResponse]] ExecuteBatchAsync (Microsoft.OData.Client.SaveChangesOptions options, Microsoft.OData.Client.DataServiceRequest[] queries)
+    public virtual System.Threading.Tasks.Task`1[[Microsoft.OData.Client.DataServiceResponse]] ExecuteBatchAsync (System.Threading.CancellationToken cancellationToken, Microsoft.OData.Client.DataServiceRequest[] queries)
+    public virtual System.Threading.Tasks.Task`1[[Microsoft.OData.Client.DataServiceResponse]] ExecuteBatchAsync (Microsoft.OData.Client.SaveChangesOptions options, System.Threading.CancellationToken cancellationToken, Microsoft.OData.Client.DataServiceRequest[] queries)
     internal virtual Microsoft.OData.Edm.Vocabularies.IEdmVocabularyAnnotatable GetEdmOperationOrOperationImport (System.Reflection.MethodInfo methodInfo)
     public virtual Microsoft.OData.Client.EntityDescriptor GetEntityDescriptor (object entity)
     internal virtual Microsoft.OData.Client.ODataResourceMetadataBuilder GetEntityMetadataBuilder (string entitySetName, Microsoft.OData.Edm.Vocabularies.IEdmStructuredValue entityInstance)
@@ -7899,7 +7983,9 @@ public class Microsoft.OData.Client.DataServiceContext {
     public virtual Microsoft.OData.Client.DataServiceStreamResponse GetReadStream (object entity, string acceptContentType)
     public virtual Microsoft.OData.Client.DataServiceStreamResponse GetReadStream (object entity, string name, Microsoft.OData.Client.DataServiceRequestArgs args)
     public virtual System.Threading.Tasks.Task`1[[Microsoft.OData.Client.DataServiceStreamResponse]] GetReadStreamAsync (object entity, Microsoft.OData.Client.DataServiceRequestArgs args)
+    public virtual System.Threading.Tasks.Task`1[[Microsoft.OData.Client.DataServiceStreamResponse]] GetReadStreamAsync (object entity, Microsoft.OData.Client.DataServiceRequestArgs args, System.Threading.CancellationToken cancellationToken)
     public virtual System.Threading.Tasks.Task`1[[Microsoft.OData.Client.DataServiceStreamResponse]] GetReadStreamAsync (object entity, string name, Microsoft.OData.Client.DataServiceRequestArgs args)
+    public virtual System.Threading.Tasks.Task`1[[Microsoft.OData.Client.DataServiceStreamResponse]] GetReadStreamAsync (object entity, string name, Microsoft.OData.Client.DataServiceRequestArgs args, System.Threading.CancellationToken cancellationToken)
     public virtual System.Uri GetReadStreamUri (object entity)
     public virtual System.Uri GetReadStreamUri (object entity, string name)
     public virtual Microsoft.OData.Client.QueryOperationResponse LoadProperty (object entity, string propertyName)
@@ -7908,11 +7994,16 @@ public class Microsoft.OData.Client.DataServiceContext {
     public virtual Microsoft.OData.Client.QueryOperationResponse LoadProperty (object entity, string propertyName, System.Uri nextLinkUri)
     public virtual System.Threading.Tasks.Task`1[[Microsoft.OData.Client.QueryOperationResponse]] LoadPropertyAsync (object entity, string propertyName)
     public virtual System.Threading.Tasks.Task`1[[Microsoft.OData.Client.QueryOperationResponse]] LoadPropertyAsync (object entity, string propertyName, Microsoft.OData.Client.DataServiceQueryContinuation continuation)
+    public virtual System.Threading.Tasks.Task`1[[Microsoft.OData.Client.QueryOperationResponse]] LoadPropertyAsync (object entity, string propertyName, System.Threading.CancellationToken cancellationToken)
     public virtual System.Threading.Tasks.Task`1[[Microsoft.OData.Client.QueryOperationResponse]] LoadPropertyAsync (object entity, string propertyName, System.Uri nextLinkUri)
+    public virtual System.Threading.Tasks.Task`1[[Microsoft.OData.Client.QueryOperationResponse]] LoadPropertyAsync (object entity, string propertyName, Microsoft.OData.Client.DataServiceQueryContinuation continuation, System.Threading.CancellationToken cancellationToken)
+    public virtual System.Threading.Tasks.Task`1[[Microsoft.OData.Client.QueryOperationResponse]] LoadPropertyAsync (object entity, string propertyName, System.Uri nextLinkUri, System.Threading.CancellationToken cancellationToken)
     public virtual Microsoft.OData.Client.DataServiceResponse SaveChanges ()
     public virtual Microsoft.OData.Client.DataServiceResponse SaveChanges (Microsoft.OData.Client.SaveChangesOptions options)
     public virtual System.Threading.Tasks.Task`1[[Microsoft.OData.Client.DataServiceResponse]] SaveChangesAsync ()
     public virtual System.Threading.Tasks.Task`1[[Microsoft.OData.Client.DataServiceResponse]] SaveChangesAsync (Microsoft.OData.Client.SaveChangesOptions options)
+    public virtual System.Threading.Tasks.Task`1[[Microsoft.OData.Client.DataServiceResponse]] SaveChangesAsync (System.Threading.CancellationToken cancellationToken)
+    public virtual System.Threading.Tasks.Task`1[[Microsoft.OData.Client.DataServiceResponse]] SaveChangesAsync (Microsoft.OData.Client.SaveChangesOptions options, System.Threading.CancellationToken cancellationToken)
     public virtual void SetLink (object source, string sourceProperty, object target)
     public virtual void SetSaveStream (object entity, System.IO.Stream stream, bool closeStream, Microsoft.OData.Client.DataServiceRequestArgs args)
     public virtual void SetSaveStream (object entity, System.IO.Stream stream, bool closeStream, string contentType, string slug)
@@ -7949,11 +8040,13 @@ public class Microsoft.OData.Client.DataServiceQuery`1 : Microsoft.OData.Client.
     internal virtual System.Collections.IEnumerable EndExecuteInternal (System.IAsyncResult asyncResult)
     public virtual IEnumerable`1 Execute ()
     public virtual Task`1 ExecuteAsync ()
+    public virtual Task`1 ExecuteAsync (System.Threading.CancellationToken cancellationToken)
     internal virtual System.Collections.IEnumerable ExecuteInternal ()
     public virtual Microsoft.OData.Client.DataServiceQuery`1 Expand (Expression`1 navigationPropertyAccessor)
     public virtual Microsoft.OData.Client.DataServiceQuery`1 Expand (string path)
     public virtual IEnumerable`1 GetAllPages ()
     public virtual Task`1 GetAllPagesAsync ()
+    public virtual Task`1 GetAllPagesAsync (System.Threading.CancellationToken cancellationToken)
     public virtual IEnumerator`1 GetEnumerator ()
     public virtual string GetKeyPath (string keyString)
     public virtual string GetPath (string nextSegment)
@@ -7997,6 +8090,7 @@ public class Microsoft.OData.Client.DataServiceQuerySingle`1 {
     public virtual string GetPath (string nextSegment)
     public virtual TElement GetValue ()
     public virtual Task`1 GetValueAsync ()
+    public virtual Task`1 GetValueAsync (System.Threading.CancellationToken cancellationToken)
     public DataServiceQuerySingle`1 Select (Expression`1 selector)
 }
 
@@ -8014,8 +8108,11 @@ SerializableAttribute(),
 ]
 public class Microsoft.OData.Client.DataServiceTransportException : System.InvalidOperationException, ISerializable {
     public DataServiceTransportException (Microsoft.OData.IODataResponseMessage response, System.Exception innerException)
+    protected DataServiceTransportException (System.Runtime.Serialization.SerializationInfo info, System.Runtime.Serialization.StreamingContext context)
 
     Microsoft.OData.IODataResponseMessage Response  { public get; }
+
+    public virtual void GetObjectData (System.Runtime.Serialization.SerializationInfo info, System.Runtime.Serialization.StreamingContext context)
 }
 
 public class Microsoft.OData.Client.EntityTracker : Microsoft.OData.Client.EntityTrackerBase {
@@ -8032,7 +8129,40 @@ public class Microsoft.OData.Client.EntityTracker : Microsoft.OData.Client.Entit
     public Microsoft.OData.Client.EntityDescriptor TryGetEntityDescriptor (object entity)
 }
 
-public class Microsoft.OData.Client.HttpWebRequestMessage : Microsoft.OData.Client.DataServiceClientRequestMessage, IODataRequestMessage {
+public class Microsoft.OData.Client.HttpClientRequestMessage : Microsoft.OData.Client.DataServiceClientRequestMessage, IDisposable, IODataRequestMessage, ISendingRequest2 {
+    public HttpClientRequestMessage (Microsoft.OData.Client.DataServiceClientRequestMessageArgs args)
+
+    System.Net.ICredentials Credentials  { public virtual get; public virtual set; }
+    System.Collections.Generic.IEnumerable`1[[System.Collections.Generic.KeyValuePair`2[[System.String],[System.String]]]] Headers  { public virtual get; }
+    string Method  { public virtual get; public virtual set; }
+    [
+    ObsoleteAttribute(),
+    ]
+    int ReadWriteTimeout  { public virtual get; public virtual set; }
+
+    bool SendChunked  { public virtual get; public virtual set; }
+    int Timeout  { public virtual get; public virtual set; }
+    System.Uri Url  { public virtual get; public virtual set; }
+
+    public virtual void Abort ()
+    public virtual System.IAsyncResult BeginGetRequestStream (System.AsyncCallback callback, object state)
+    public virtual System.IAsyncResult BeginGetResponse (System.AsyncCallback callback, object state)
+    public virtual void Dispose ()
+    protected virtual void Dispose (bool disposing)
+    public virtual System.IO.Stream EndGetRequestStream (System.IAsyncResult asyncResult)
+    public virtual Microsoft.OData.IODataResponseMessage EndGetResponse (System.IAsyncResult asyncResult)
+    public virtual string GetHeader (string headerName)
+    public virtual Microsoft.OData.IODataResponseMessage GetResponse ()
+    public virtual System.IO.Stream GetStream ()
+    void Microsoft.OData.Client.ISendingRequest2.AfterSendingRequest2Event ()
+    void Microsoft.OData.Client.ISendingRequest2.BeforeSendingRequest2Event ()
+    public virtual void SetHeader (string headerName, string headerValue)
+}
+
+[
+ObsoleteAttribute(),
+]
+public class Microsoft.OData.Client.HttpWebRequestMessage : Microsoft.OData.Client.DataServiceClientRequestMessage, IODataRequestMessage, ISendingRequest2 {
     public HttpWebRequestMessage (Microsoft.OData.Client.DataServiceClientRequestMessageArgs args)
 
     System.Net.ICredentials Credentials  { public virtual get; public virtual set; }
@@ -8052,6 +8182,8 @@ public class Microsoft.OData.Client.HttpWebRequestMessage : Microsoft.OData.Clie
     public virtual string GetHeader (string headerName)
     public virtual Microsoft.OData.IODataResponseMessage GetResponse ()
     public virtual System.IO.Stream GetStream ()
+    void Microsoft.OData.Client.ISendingRequest2.AfterSendingRequest2Event ()
+    void Microsoft.OData.Client.ISendingRequest2.BeforeSendingRequest2Event ()
     public virtual void SetHeader (string headerName, string headerValue)
 }
 
@@ -8170,6 +8302,7 @@ public sealed class Microsoft.OData.Client.DataServiceActionQuerySingle`1 {
     public T EndGetValue (System.IAsyncResult asyncResult)
     public T GetValue ()
     public Task`1 GetValueAsync ()
+    public Task`1 GetValueAsync (System.Threading.CancellationToken cancellationToken)
 }
 
 [
@@ -8184,6 +8317,8 @@ public sealed class Microsoft.OData.Client.DataServiceClientException : System.I
     public DataServiceClientException (string message, System.Exception innerException, int statusCode)
 
     int StatusCode  { public get; }
+
+    public virtual void GetObjectData (System.Runtime.Serialization.SerializationInfo info, System.Runtime.Serialization.StreamingContext context)
 }
 
 public sealed class Microsoft.OData.Client.DataServiceClientFormat {

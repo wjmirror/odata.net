@@ -12,6 +12,7 @@ namespace Microsoft.OData.Evaluation
     using System.Diagnostics;
     using System.Diagnostics.CodeAnalysis;
     using System.Linq;
+    using Microsoft.OData.Edm.Vocabularies.V1;
     using Microsoft.OData.JsonLight;
     #endregion
 
@@ -127,7 +128,7 @@ namespace Microsoft.OData.Evaluation
                     }
 
                     // editUrl = parentEditUrl/propertyName
-                    this.editUrl = new Uri(parent.GetEditUrl() + "/" + this.NameAsProperty, UriKind.RelativeOrAbsolute);
+                    this.editUrl = new Uri(string.Concat(parent.GetEditUrl(), "/", this.NameAsProperty), UriKind.RelativeOrAbsolute);
                 }
             }
 
@@ -184,7 +185,7 @@ namespace Microsoft.OData.Evaluation
                 }
 
                 // readUrl = parentReadUrl/propertyName
-                this.readUrl = new Uri(parent.GetReadUrl() + "/" + this.NameAsProperty, UriKind.RelativeOrAbsolute);
+                this.readUrl = new Uri(string.Concat(parent.GetReadUrl(), "/", this.NameAsProperty), UriKind.RelativeOrAbsolute);
 
                 // Append possible type cast
                 if (this.ResourceMetadataContext.ActualResourceTypeName !=
@@ -247,7 +248,7 @@ namespace Microsoft.OData.Evaluation
                     }
                 }
 
-                this.canonicalUrl = new Uri(this.canonicalUrl + "/" + this.NameAsProperty, UriKind.RelativeOrAbsolute);
+                this.canonicalUrl = new Uri(string.Concat(this.canonicalUrl, "/", this.NameAsProperty), UriKind.RelativeOrAbsolute);
             }
             else
             {
@@ -428,13 +429,24 @@ namespace Microsoft.OData.Evaluation
                 string propertyName = unprocessedStreamProperties.Current;
                 ODataStreamReferenceValue streamPropertyValue = new ODataStreamReferenceValue();
                 streamPropertyValue.SetMetadataBuilder(this, propertyName);
+
+                // by default, let's retrieve the content type from vocabulary annotation
+                var edmProperty = this.ResourceMetadataContext.SelectedStreamProperties[propertyName];
+                var mediaTypes = this.MetadataContext.Model.GetVocabularyStringCollection(edmProperty, CoreVocabularyModel.AcceptableMediaTypesTerm);
+                if (mediaTypes.Count() == 1)
+                {
+                    // Be noted: AcceptableMediaTypes might have more than one media type,
+                    // Convention (default) behavior only works if AcceptableMediaTypes is a collection of one.
+                    streamPropertyValue.ContentType = mediaTypes.ElementAt(0);
+                }
+
                 return new ODataProperty { Name = propertyName, Value = streamPropertyValue };
             }
 
             return null;
         }
 
-        //// Stream content type and ETag can't be computed from conventions.
+        //// Stream content type and ETag can't be computed from conventions, but it can retrieve from the vocabulary annoation?
 
         /// <summary>
         /// Gets the navigation link URI for the specified navigation property.

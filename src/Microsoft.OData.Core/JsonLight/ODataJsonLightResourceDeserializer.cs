@@ -1232,7 +1232,7 @@ namespace Microsoft.OData.JsonLight
                     ODataJsonLightReaderNestedResourceInfo readerNestedResourceInfo = null;
 
                     // Complex property or collection of complex property.
-                    ValidateExpandedNestedResourceInfoPropertyValue(this.JsonReader, isCollection, propertyName);
+                    ValidateExpandedNestedResourceInfoPropertyValue(this.JsonReader, isCollection, propertyName, edmProperty.Type);
 
                     if (isCollection)
                     {
@@ -1251,7 +1251,7 @@ namespace Microsoft.OData.JsonLight
                     ODataJsonLightReaderNestedResourceInfo readerNestedResourceInfo = null;
 
                     // Expanded link
-                    ValidateExpandedNestedResourceInfoPropertyValue(this.JsonReader, isCollection, propertyName);
+                    ValidateExpandedNestedResourceInfoPropertyValue(this.JsonReader, isCollection, propertyName, edmProperty.Type);
                     if (isCollection)
                     {
                         readerNestedResourceInfo = this.ReadingResponse || isDeltaResourceSet
@@ -1320,6 +1320,7 @@ namespace Microsoft.OData.JsonLight
             Func<IEdmPrimitiveType, bool, string, IEdmProperty, bool> readAsStream = this.MessageReaderSettings.ReadAsStreamFunc;
 
             // is the property a stream or a stream collection,
+            // untyped collection,
             // or a binary or binary collection the client wants to read as a stream...
             if (
                 (primitiveType != null &&
@@ -1328,7 +1329,10 @@ namespace Microsoft.OData.JsonLight
                              && (property == null || !property.IsKey())  // don't stream key properties
                              && (primitiveType.IsBinary() || primitiveType.IsString() || isCollection))
                          && readAsStream(primitiveType, isCollection, propertyName, property))) ||
-                ((propertyType == null || propertyType.Definition.AsElementType().IsUntyped())
+                (propertyType != null &&
+                    isCollection &&
+                    propertyType.Definition.AsElementType().IsUntyped()) ||
+                (propertyType == null
                     && (isCollection || this.JsonReader.CanStream())
                     && readAsStream != null
                     && readAsStream(null, isCollection, propertyName, property)))
@@ -1548,7 +1552,7 @@ namespace Microsoft.OData.JsonLight
             if (payloadTypeOrItemType != null)
             {
                 // Complex property or collection of complex property.
-                ValidateExpandedNestedResourceInfoPropertyValue(this.JsonReader, isCollection, propertyName);
+                ValidateExpandedNestedResourceInfoPropertyValue(this.JsonReader, isCollection, propertyName, payloadTypeReference);
                 if (isCollection)
                 {
                     return ReadNonExpandedResourceSetNestedResourceInfo(resourceState, null, payloadTypeOrItemType, propertyName);
@@ -1668,7 +1672,7 @@ namespace Microsoft.OData.JsonLight
                 // If the property is expanded, ignore the content if we're asked to do so.
                 if (propertyWithValue)
                 {
-                    ValidateExpandedNestedResourceInfoPropertyValue(this.JsonReader, null, propertyName);
+                    ValidateExpandedNestedResourceInfoPropertyValue(this.JsonReader, null, propertyName, resourceState.ResourceType.ToTypeReference());
 
                     // Since we marked the nested resource info as deferred the reader will not try to read its content
                     // instead it will behave as if it was a real deferred link (without a property value).
@@ -1679,7 +1683,6 @@ namespace Microsoft.OData.JsonLight
 
                 return navigationLinkInfo;
             }
-
 
             if (resourceState.ResourceType.IsOpen)
             {

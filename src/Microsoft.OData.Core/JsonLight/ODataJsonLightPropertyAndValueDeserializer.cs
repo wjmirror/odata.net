@@ -422,7 +422,7 @@ namespace Microsoft.OData.JsonLight
 
                 // Complex property or collection of complex property.
                 bool isCollection = payloadTypeReference.IsCollection();
-                ValidateExpandedNestedResourceInfoPropertyValue(this.JsonReader, isCollection, propertyName);
+                ValidateExpandedNestedResourceInfoPropertyValue(this.JsonReader, isCollection, propertyName, payloadTypeReference);
                 if (isCollection)
                 {
                     readerNestedResourceInfo = this.ReadingResponse
@@ -473,7 +473,8 @@ namespace Microsoft.OData.JsonLight
         /// <param name="jsonReader">The IJsonReader.</param>
         /// <param name="isCollection">true if the property is entity set reference property; false for a resource reference property, null if unknown.</param>
         /// <param name="propertyName">Name for the navigation property, used in error message only.</param>
-        protected static void ValidateExpandedNestedResourceInfoPropertyValue(IJsonReader jsonReader, bool? isCollection, string propertyName)
+        /// <param name="typeReference">Type of navigation property</param>
+        protected static void ValidateExpandedNestedResourceInfoPropertyValue(IJsonReader jsonReader, bool? isCollection, string propertyName, IEdmTypeReference typeReference)
         {
             // an expanded link with resource requires a StartObject node here;
             // an expanded link with resource set requires a StartArray node here;
@@ -491,7 +492,16 @@ namespace Microsoft.OData.JsonLight
                 // Expanded resource (null or non-null)
                 if (isCollection == true)
                 {
-                    throw new ODataException(ODataErrorStrings.ODataJsonLightResourceDeserializer_CannotReadCollectionNestedResource(nodeType, propertyName));
+                    if (typeReference.IsNonEntityCollectionType())
+                    {
+                        ReaderValidationUtils.ValidateNullValue(typeReference, true,
+                                                  true, propertyName, false);
+                    }
+                    else
+                    {
+                        throw new ODataException(ODataErrorStrings.ODataJsonLightResourceDeserializer_CannotReadCollectionNestedResource(nodeType, propertyName));
+                    }
+                    
                 }
             }
             else
@@ -1795,6 +1805,7 @@ namespace Microsoft.OData.JsonLight
                 }
             }
 
+            expectedTypeReference = expectedTypeReference != null && expectedTypeReference.IsUntyped() ? null : expectedTypeReference;
             ODataTypeAnnotation typeAnnotation;
             EdmTypeKind targetTypeKind;
             IEdmTypeReference targetTypeReference = this.ReaderValidator.ResolvePayloadTypeNameAndComputeTargetType(
@@ -1919,7 +1930,7 @@ namespace Microsoft.OData.JsonLight
                 }
 
                 // If we have no expected type make sure the collection items are of the same kind and specify the same name.
-                if (collectionValidator != null)
+                if (collectionValidator != null && targetTypeKind != EdmTypeKind.None)
                 {
                     string payloadTypeNameFromResult = ODataJsonLightReaderUtils.GetPayloadTypeName(result);
                     Debug.Assert(expectedTypeReference == null, "If a collection validator is specified there must not be an expected value type reference.");
