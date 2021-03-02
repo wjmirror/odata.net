@@ -93,7 +93,7 @@ namespace Microsoft.OData
 
             var type = instance.GetType();
 #if NETSTANDARD1_1
-            if (GetTypeInfo().IsGenericType)
+            if (type.GetTypeInfo().IsGenericType)
 #else
             if (type.IsGenericType)
 #endif
