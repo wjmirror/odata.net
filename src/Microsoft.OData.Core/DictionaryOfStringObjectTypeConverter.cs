@@ -1,5 +1,5 @@
 ﻿//---------------------------------------------------------------------
-// <copyright file="DictionaryStringObjectTypeConverter.cs" company="Microsoft">
+// <copyright file="DictionaryOfStringObjectTypeConverter.cs" company="Microsoft">
 //      Copyright (C) Microsoft Corporation. All rights reserved. See License.txt in the project root for license information.
 // </copyright>
 //---------------------------------------------------------------------
@@ -16,7 +16,7 @@ namespace Microsoft.OData
     /// <summary>
     /// Handles serialization and deserialization for types derived from Geography.
     /// </summary>
-    internal sealed class DictionaryOfStringObjectTypeConverter : IPrimitiveTypeConverter
+    internal sealed class DictionaryOfStringObjectTypeConverter : IPrimitiveTypeConverter 
     {
         /// <summary>
         /// Write the Atom representation of an instance of a primitive type to an XmlWriter.
