@@ -90,4 +90,3 @@ using System.Security;
 #endif
 
 [assembly: NeutralResourcesLanguageAttribute("en-US")]
-[assembly: AssemblyVersion("99.1.1.1")]
