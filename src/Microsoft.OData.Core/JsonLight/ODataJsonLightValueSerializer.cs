@@ -345,7 +345,7 @@ namespace Microsoft.OData.JsonLight
 
             value = converter.ConvertToPayloadValue(value, expectedTypeReference);
 
-            if (actualTypeReference != null && actualTypeReference.IsSpatial() || actualTypeReference.IsDictionaryOfStringObject() || actualTypeReference.IsDictionaryOfStringString())
+            if (actualTypeReference != null && (actualTypeReference.IsSpatial() || actualTypeReference.IsDictionaryOfStringObject() || actualTypeReference.IsDictionaryOfStringString()))
             {
                 PrimitiveConverter.Instance.WriteJsonLight(value, this.JsonWriter);
             }
@@ -662,14 +662,16 @@ namespace Microsoft.OData.JsonLight
             ODataPayloadValueConverter converter = this.JsonLightOutputContext.PayloadValueConverter;
 
             // Skip validation if user has set custom PayloadValueConverter
-            if (expectedTypeReference != null && converter.GetType() == typeof(ODataPayloadValueConverter))
+            if (expectedTypeReference != null && converter.GetType() == typeof(ODataPayloadValueConverter)
+                // TODO (Brecht): better filter.
+                && expectedTypeReference.Definition.FullTypeName() != "Edm.Object")
             {
                 this.WriterValidator.ValidateIsExpectedPrimitiveType(value, (IEdmPrimitiveTypeReference)actualTypeReference, expectedTypeReference);
             }
 
             value = converter.ConvertToPayloadValue(value, expectedTypeReference);
 
-            if (actualTypeReference != null && actualTypeReference.IsSpatial())
+            if (actualTypeReference != null && (actualTypeReference.IsSpatial() || actualTypeReference.IsDictionaryOfStringObject() || actualTypeReference.IsDictionaryOfStringString()))
             {
                 // TODO: Implement asynchronous handling of spatial types in a separate PR
                 await TaskUtils.GetTaskForSynchronousOperation(() =>
