@@ -42,6 +42,9 @@ namespace Microsoft.OData.Edm.Csdl.CsdlSemantics
         private readonly ConcurrentDictionary<IEdmNavigationProperty, IEdmUnknownEntitySet> unknownNavigationPropertyCache =
             new ConcurrentDictionary<IEdmNavigationProperty, IEdmUnknownEntitySet>();
 
+        private readonly ConcurrentDictionary<IEdmNavigationProperty, IEnumerable<IEdmNavigationPropertyBinding>> navigationPropertyBindingCache = 
+            new ConcurrentDictionary<IEdmNavigationProperty, IEnumerable<IEdmNavigationPropertyBinding>>();
+
         public CsdlSemanticsNavigationSource(CsdlSemanticsEntityContainer container, CsdlAbstractNavigationSource navigationSource)
             : base(navigationSource)
         {
@@ -127,7 +130,10 @@ namespace Microsoft.OData.Edm.Csdl.CsdlSemantics
         {
             if (!navigationProperty.ContainsTarget)
             {
-                return this.NavigationPropertyBindings.Where(targetMapping => targetMapping.NavigationProperty == navigationProperty).ToList();
+                return EdmUtil.DictionaryGetOrUpdate(
+                    this.navigationPropertyBindingCache,
+                    navigationProperty,
+                    property => this.NavigationPropertyBindings.Where(targetMapping => targetMapping.NavigationProperty == property).ToList());
             }
 
             return null;
@@ -142,7 +148,7 @@ namespace Microsoft.OData.Edm.Csdl.CsdlSemantics
 
         private IEnumerable<IEdmNavigationPropertyBinding> ComputeNavigationTargets()
         {
-            return this.navigationSource.NavigationPropertyBindings.Select(this.CreateSemanticMappingForBinding).ToList();
+            return this.navigationSource.NavigationPropertyBindings.Select(this.CreateSemanticMappingForBinding);
         }
 
         private IEdmNavigationPropertyBinding CreateSemanticMappingForBinding(CsdlNavigationPropertyBinding binding)

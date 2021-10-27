@@ -61,6 +61,13 @@ namespace Microsoft.OData.Tests.ScenarioTests.UriParser
         }
 
         [Fact]
+        public void SelectPropertiesWithDollarCountOperationThrows()
+        {
+            Action readResult = () => RunParseSelectExpand("MyLions/$count", null, HardCodedTestModel.GetPersonType(), HardCodedTestModel.GetPeopleSet());
+            readResult.Throws<ODataException>(ODataErrorStrings.ExpressionToken_DollarCountNotAllowedInSelect);
+        }
+
+        [Fact]
         public void SelectWithAsteriskMeansWildcard()
         {
             ParseSingleSelectForPerson("*").ShouldBeWildcardSelectionItem();
@@ -570,6 +577,14 @@ namespace Microsoft.OData.Tests.ScenarioTests.UriParser
             const string expandClauseText = "MyDog/$ref/MyPeople";
             Action readResult = () => RunParseSelectExpand(null, expandClauseText, HardCodedTestModel.GetPersonType(), HardCodedTestModel.GetPeopleSet());
             readResult.Throws<ODataException>(ODataErrorStrings.ExpressionToken_NoPropAllowedAfterRef);
+        }
+
+        [Fact]
+        public void ExpandNavigationWithNavigationAfterDollarCountOperationThrows()
+        {
+            const string expandClauseText = "MyDog/$count/MyPeople";
+            Action readResult = () => RunParseSelectExpand(null, expandClauseText, HardCodedTestModel.GetPersonType(), HardCodedTestModel.GetPeopleSet());
+            readResult.Throws<ODataException>(ODataErrorStrings.ExpressionToken_NoPropAllowedAfterDollarCount);
         }
 
         [Fact]
@@ -1414,6 +1429,107 @@ namespace Microsoft.OData.Tests.ScenarioTests.UriParser
             Assert.Equal(expectedLeft, left);
         }
 
+        [Theory]
+        [InlineData("RelatedSSNs($orderby=$this)", OrderByDirection.Ascending)]
+        [InlineData("RelatedSSNs($orderby=$this asc)", OrderByDirection.Ascending)]
+        [InlineData("RelatedSSNs($orderby=$this desc)", OrderByDirection.Descending)]
+        public void DollarThisinOrderByPrimitiveCollectionInsideSelectShouldReferenceSelectedItem(string queryString, OrderByDirection orderByDirection)
+        {
+            // Arrange & Act
+            // People?$select=RelatedSSNs($orderby=$this)
+            // People?$select=RelatedSSNs($orderby=$this asc)
+            // People?$select=RelatedSSNs($orderby=$this desc)
+            SelectExpandClause clause = RunParseSelectExpand(queryString, "", HardCodedTestModel.GetPersonType(), HardCodedTestModel.GetPeopleSet());
+
+            OrderByClause orderByClause =
+                (
+                    clause.SelectedItems.First() as PathSelectItem // $select=RelatedSSNs(...)
+                ).OrderByOption;
+
+            IEdmTypeReference typeReference = (orderByClause.Expression as NonResourceRangeVariableReferenceNode).TypeReference;
+
+            // Assert
+            orderByClause.Expression.ShouldBeNonResourceRangeVariableReferenceNode(ExpressionConstants.This);
+            Assert.Equal(orderByDirection, orderByClause.Direction);
+            Assert.Equal("Edm.String", typeReference.Definition.FullTypeName()); // RelatedSSNs is a collection of strings.
+        }
+
+        [Fact]
+        public void DollarThisinFilterInsideSelectShouldReferenceSelectedItemPrimitiveType()
+        {
+            // Arrange & Act
+            // People?$select=RelatedSSNs($filter=endswith($this,'xyz'))
+            SelectExpandClause clause = RunParseSelectExpand("RelatedSSNs($filter=endswith($this,'xyz'))", "", HardCodedTestModel.GetPersonType(), HardCodedTestModel.GetPeopleSet());
+
+            // Assert
+            PathSelectItem selectItem = (PathSelectItem) Assert.Single(clause.SelectedItems);
+            Assert.NotNull(selectItem.FilterOption);
+            selectItem.FilterOption.Expression.ShouldBeSingleValueFunctionCallQueryNode("endswith");
+
+            SingleValueFunctionCallNode singleValueFunctionCallNode = (SingleValueFunctionCallNode)selectItem.FilterOption.Expression;
+            Assert.Equal(2, singleValueFunctionCallNode.Parameters.Count());
+
+            ConvertNode convertNode = (ConvertNode) singleValueFunctionCallNode.Parameters.First();
+
+            // $this references RelatedSSNs which is a collection of primitives, that's why we have a NonResourceRangeVariableReferenceNode
+            convertNode.Source.ShouldBeNonResourceRangeVariableReferenceNode(ExpressionConstants.This);
+            IEdmTypeReference typeReference = convertNode.Source.TypeReference;
+            Assert.Equal("Edm.String", typeReference.Definition.FullTypeName()); // RelatedSSNs is a collection of strings.
+        }
+
+        [Fact]
+        public void DollarThisinFilterInsideSelectShouldReferenceSelectedItemStructuredType()
+        {
+            // Arrange
+
+            // $this/Street references PreviousAddresses which is a collection of Type Address.
+            IEdmStructuredType expectedType = (IEdmStructuredType)HardCodedTestModel.GetAddressType();
+
+            // Act
+            // People?$select=PreviousAddresses($filter=endswith($this/Street,'xyz'))
+            SelectExpandClause clause = RunParseSelectExpand("PreviousAddresses($filter=endswith($this/Street,'xyz'))", "", HardCodedTestModel.GetPersonType(), HardCodedTestModel.GetPeopleSet());
+
+            // Assert
+            PathSelectItem selectItem = (PathSelectItem)Assert.Single(clause.SelectedItems);
+            Assert.NotNull(selectItem.FilterOption);
+            selectItem.FilterOption.Expression.ShouldBeSingleValueFunctionCallQueryNode("endswith");
+
+            SingleValueFunctionCallNode singleValueFunctionCallNode = (SingleValueFunctionCallNode)selectItem.FilterOption.Expression; // endswith($this/Street,'xyz')
+            Assert.Equal(2, singleValueFunctionCallNode.Parameters.Count());
+
+            SingleValuePropertyAccessNode singleValuePropertyAccessNode = (SingleValuePropertyAccessNode)singleValueFunctionCallNode.Parameters.First(); // $this/Street
+
+            // $this references Address which is a structured stype, that's why we have a ResourceRangeVariableReferenceNode.
+            singleValuePropertyAccessNode.Source.ShouldBeResourceRangeVariableReferenceNode(ExpressionConstants.This);
+            Assert.Equal("Street", singleValuePropertyAccessNode.Property.Name);
+            Assert.Equal(expectedType, singleValuePropertyAccessNode.Property.DeclaringType); // Address is the DeclaringType of Street
+        }
+
+        [Fact]
+        public void DollarThisinFilterInsideSelectInsideExpandShouldReferenceSelectedItem()
+        {
+            // Arrange & Act
+            // People?$expand=MyDog($select=Nicknames($filter=startswith($this, 'blu')))
+            SelectExpandClause clause = RunParseSelectExpand("", "MyDog($select=Nicknames($filter=startswith($this, 'blu')))", HardCodedTestModel.GetPersonType(), HardCodedTestModel.GetPeopleSet());
+
+            // Assert
+            ExpandedNavigationSelectItem expandedSelectItem = (ExpandedNavigationSelectItem)Assert.Single(clause.SelectedItems); // $expand=MyDog(...)
+            Assert.NotNull(expandedSelectItem.SelectAndExpand);
+            SelectExpandClause innerClause = expandedSelectItem.SelectAndExpand; // $select=Nicknames(...)
+
+            PathSelectItem selectItem = (PathSelectItem)Assert.Single(innerClause.SelectedItems);
+            Assert.NotNull(selectItem.FilterOption);
+            selectItem.FilterOption.Expression.ShouldBeSingleValueFunctionCallQueryNode("startswith");
+
+            SingleValueFunctionCallNode singleValueFunctionCallNode = (SingleValueFunctionCallNode)selectItem.FilterOption.Expression;
+            Assert.Equal(2, singleValueFunctionCallNode.Parameters.Count());
+
+            ConvertNode convertNode = (ConvertNode)singleValueFunctionCallNode.Parameters.First();
+            convertNode.Source.ShouldBeNonResourceRangeVariableReferenceNode(ExpressionConstants.This);
+            IEdmTypeReference typeReference = convertNode.Source.TypeReference;
+            Assert.Equal("Edm.String", typeReference.Definition.FullTypeName()); // Nicknames is a collection of strings.
+        }
+
         [Fact]
         public void SelectAndExpandShouldFailOnSelectWrongComplexProperties()
         {
@@ -1481,8 +1597,225 @@ namespace Microsoft.OData.Tests.ScenarioTests.UriParser
             Assert.NotNull(pathSelectItem.TopOption);
             Assert.Equal(4, pathSelectItem.TopOption);
 
-            Assert.NotNull(pathSelectItem.TopOption);
+            Assert.NotNull(pathSelectItem.SkipOption);
             Assert.Equal(2, pathSelectItem.SkipOption);
+        }
+
+        // $expand=navProp/$count
+        [Fact]
+        public void ExpandWithNavigationPropCountWorks()
+        {
+            // Arrange
+            var odataQueryOptionParser = new ODataQueryOptionParser(HardCodedTestModel.TestModel,
+                HardCodedTestModel.GetPersonType(), HardCodedTestModel.GetPeopleSet(),
+                new Dictionary<string, string>()
+                {
+                    {"$expand", "MyPaintings/$count"}
+                });
+
+            // Act
+            var selectExpandClause = odataQueryOptionParser.ParseSelectAndExpand();
+
+            // Assert
+            Assert.NotNull(selectExpandClause);
+            ExpandedCountSelectItem expandedCountSelectItem = Assert.IsType<ExpandedCountSelectItem>(Assert.Single(selectExpandClause.SelectedItems));
+            Assert.Null(expandedCountSelectItem.FilterOption);
+            Assert.Null(expandedCountSelectItem.SearchOption);
+        }
+
+        // $expand=navProp/$count($filter=prop)
+        [Fact]
+        public void ExpandWithNavigationPropCountWithFilterOptionWorks()
+        {
+            // Arrange
+            var odataQueryOptionParser = new ODataQueryOptionParser(HardCodedTestModel.TestModel,
+                HardCodedTestModel.GetPersonType(), HardCodedTestModel.GetPeopleSet(),
+                new Dictionary<string, string>()
+                {
+                    {"$expand", "MyPaintings/$count($filter=Artist eq 'Artist One')"}
+                });
+
+            // Act
+            var selectExpandClause = odataQueryOptionParser.ParseSelectAndExpand();
+
+            // Assert
+            Assert.NotNull(selectExpandClause);
+            ExpandedCountSelectItem expandedCountSelectItem = Assert.IsType<ExpandedCountSelectItem>(Assert.Single(selectExpandClause.SelectedItems));
+            Assert.NotNull(expandedCountSelectItem.FilterOption);
+            Assert.Null(expandedCountSelectItem.SearchOption);
+        }
+
+        // $expand=navProp/$count($search=prop)
+        [Fact]
+        public void ExpandWithNavigationPropCountWithSearchOptionWorks()
+        {
+            // Arrange
+            var odataQueryOptionParser = new ODataQueryOptionParser(HardCodedTestModel.TestModel,
+                HardCodedTestModel.GetPersonType(), HardCodedTestModel.GetPeopleSet(),
+                new Dictionary<string, string>()
+                {
+                    {"$expand", "MyPaintings/$count($search=Blue)"}
+                });
+
+            // Act
+            var selectExpandClause = odataQueryOptionParser.ParseSelectAndExpand();
+
+            // Assert
+            Assert.NotNull(selectExpandClause);
+            ExpandedCountSelectItem expandedCountSelectItem = Assert.IsType<ExpandedCountSelectItem>(Assert.Single(selectExpandClause.SelectedItems));
+            Assert.Null(expandedCountSelectItem.FilterOption);
+            Assert.NotNull(expandedCountSelectItem.SearchOption);
+        }
+
+        // $expand=navProp/fully.qualified.type/$ref
+        [Theory]
+        [InlineData("MyPeople/Fully.Qualified.Namespace.Employee/$ref")]
+        [InlineData("MyPeople/MainAlias.Employee/$ref")]
+        public void ExpandWithNavigationPropRefWithFullyQualifiedTypeWorks(string query)
+        {
+            // Arrange
+            var odataQueryOptionParser = new ODataQueryOptionParser(HardCodedTestModel.TestModel,
+                HardCodedTestModel.GetDogType(), HardCodedTestModel.GetDogsSet(),
+                new Dictionary<string, string>()
+                {
+                    {"$expand", query}
+                });
+
+            // Act
+            var selectExpandClause = odataQueryOptionParser.ParseSelectAndExpand();
+
+            // Assert
+            Assert.NotNull(selectExpandClause);
+            ExpandedReferenceSelectItem expandedRefSelectItem = Assert.IsType<ExpandedReferenceSelectItem>(Assert.Single(selectExpandClause.SelectedItems));
+            Assert.Same(HardCodedTestModel.GetPeopleSet(), expandedRefSelectItem.NavigationSource);
+            Assert.Equal(2, expandedRefSelectItem.PathToNavigationProperty.Count);
+
+            NavigationPropertySegment navPropSegment = Assert.IsType<NavigationPropertySegment>(expandedRefSelectItem.PathToNavigationProperty.Segments.First());
+            TypeSegment typeSegment = Assert.IsType<TypeSegment>(expandedRefSelectItem.PathToNavigationProperty.Segments.Last());
+            Assert.Equal("MyPeople", navPropSegment.Identifier);
+            Assert.Equal("Collection(Fully.Qualified.Namespace.Person)", navPropSegment.EdmType.FullTypeName());
+            Assert.Equal("Fully.Qualified.Namespace.Employee", typeSegment.EdmType.FullTypeName());
+        }
+
+        // $expand=navProp/fully.qualified.type/$count
+        [Theory]
+        [InlineData("MyPeople/Fully.Qualified.Namespace.Employee/$count")]
+        [InlineData("MyPeople/MainAlias.Employee/$count")] // With schema alias
+        public void ExpandWithNavigationPropCountWithFullyQualifiedTypeWorks(string query)
+        {
+            // Arrange
+            var odataQueryOptionParser = new ODataQueryOptionParser(HardCodedTestModel.TestModel,
+                HardCodedTestModel.GetDogType(), HardCodedTestModel.GetDogsSet(),
+                new Dictionary<string, string>()
+                {
+                    {"$expand", query}
+                });
+
+            // Act
+            var selectExpandClause = odataQueryOptionParser.ParseSelectAndExpand();
+
+            // Assert
+            Assert.NotNull(selectExpandClause);
+            ExpandedCountSelectItem expandedCountSelectItem = Assert.IsType<ExpandedCountSelectItem>(Assert.Single(selectExpandClause.SelectedItems));
+            Assert.Same(HardCodedTestModel.GetPeopleSet(), expandedCountSelectItem.NavigationSource);
+            Assert.Null(expandedCountSelectItem.FilterOption);
+            Assert.Null(expandedCountSelectItem.SearchOption);
+            Assert.Equal(2, expandedCountSelectItem.PathToNavigationProperty.Count);
+
+            NavigationPropertySegment navPropSegment = Assert.IsType<NavigationPropertySegment>(expandedCountSelectItem.PathToNavigationProperty.Segments.First());
+            TypeSegment typeSegment = Assert.IsType<TypeSegment>(expandedCountSelectItem.PathToNavigationProperty.Segments.Last());
+            Assert.Equal("MyPeople", navPropSegment.Identifier);
+            Assert.Equal("Collection(Fully.Qualified.Namespace.Person)", navPropSegment.EdmType.FullTypeName());
+            Assert.Equal("Fully.Qualified.Namespace.Employee", typeSegment.EdmType.FullTypeName());
+        }
+
+        // $expand=navProp/fully.qualified.type/$count($filter=prop)
+        [Theory]
+        [InlineData("MyPeople/Fully.Qualified.Namespace.Employee/$count($filter=ID eq 1)")]
+        [InlineData("MyPeople/MainAlias.Employee/$count($filter=ID eq 1)")] // With schema alias
+        public void ExpandWithNavigationPropCountWithFilterAndFullyQualifiedTypeWorks(string query)
+        {
+            // Arrange
+            var odataQueryOptionParser = new ODataQueryOptionParser(HardCodedTestModel.TestModel,
+                HardCodedTestModel.GetDogType(), HardCodedTestModel.GetDogsSet(),
+                new Dictionary<string, string>()
+                {
+                    {"$expand", query}
+                });
+
+            // Act
+            var selectExpandClause = odataQueryOptionParser.ParseSelectAndExpand();
+
+            // Assert
+            Assert.NotNull(selectExpandClause);
+            ExpandedCountSelectItem expandedCountSelectItem = Assert.IsType<ExpandedCountSelectItem>(Assert.Single(selectExpandClause.SelectedItems));
+            Assert.Same(HardCodedTestModel.GetPeopleSet(), expandedCountSelectItem.NavigationSource);
+            Assert.NotNull(expandedCountSelectItem.FilterOption);
+            Assert.Null(expandedCountSelectItem.SearchOption);
+            Assert.Equal(2, expandedCountSelectItem.PathToNavigationProperty.Count);
+
+            NavigationPropertySegment navPropSegment = Assert.IsType<NavigationPropertySegment>(expandedCountSelectItem.PathToNavigationProperty.Segments.First());
+            TypeSegment typeSegment = Assert.IsType<TypeSegment>(expandedCountSelectItem.PathToNavigationProperty.Segments.Last());
+            Assert.Equal("MyPeople", navPropSegment.Identifier);
+            Assert.Equal("Collection(Fully.Qualified.Namespace.Person)", navPropSegment.EdmType.FullTypeName());
+            Assert.Equal("Fully.Qualified.Namespace.Employee", typeSegment.EdmType.FullTypeName());
+        }
+
+        // $expand=navProp/fully.qualified.type/$count($search=prop)
+        [Theory]
+        [InlineData("MyPeople/Fully.Qualified.Namespace.Employee/$count($search=blue)")]
+        [InlineData("MyPeople/MainAlias.Employee/$count($search=blue)")] // With schema alias
+        public void ExpandWithNavigationPropCountWithSearchAndFullyQualifiedTypeWorks(string query)
+        {
+            // Arrange
+            var odataQueryOptionParser = new ODataQueryOptionParser(HardCodedTestModel.TestModel,
+                HardCodedTestModel.GetDogType(), HardCodedTestModel.GetDogsSet(),
+                new Dictionary<string, string>()
+                {
+                    {"$expand", query}
+                });
+
+            // Act
+            var selectExpandClause = odataQueryOptionParser.ParseSelectAndExpand();
+
+            // Assert
+            Assert.NotNull(selectExpandClause);
+            ExpandedCountSelectItem expandedCountSelectItem = Assert.IsType<ExpandedCountSelectItem>(Assert.Single(selectExpandClause.SelectedItems));
+            Assert.Same(HardCodedTestModel.GetPeopleSet(), expandedCountSelectItem.NavigationSource);
+            Assert.Null(expandedCountSelectItem.FilterOption);
+            Assert.NotNull(expandedCountSelectItem.SearchOption);
+            Assert.Equal(2, expandedCountSelectItem.PathToNavigationProperty.Count);
+
+            NavigationPropertySegment navPropSegment = Assert.IsType<NavigationPropertySegment>(expandedCountSelectItem.PathToNavigationProperty.Segments.First());
+            TypeSegment typeSegment = Assert.IsType<TypeSegment>(expandedCountSelectItem.PathToNavigationProperty.Segments.Last());
+            Assert.Equal("MyPeople", navPropSegment.Identifier);
+            Assert.Equal("Collection(Fully.Qualified.Namespace.Person)", navPropSegment.EdmType.FullTypeName());
+            Assert.Equal("Fully.Qualified.Namespace.Employee", typeSegment.EdmType.FullTypeName());
+        }
+
+        [Theory]
+        [InlineData("MyPeople/Fully.Qualified.Namespace.UndefinedType")]
+        [InlineData("MyPeople/Fully.Qualified.Namespace.UndefinedType/$ref")]
+        [InlineData("MyPeople/Fully.Qualified.Namespace.UndefinedType/$count")]
+        [InlineData("MyPeople/Fully.Qualified.Namespace.UndefinedType/$count($search=blue)")]
+        [InlineData("MyPeople/Fully.Qualified.Namespace.UndefinedType/$count($filter=ID eq 1)")]
+        public void ExpandWithNavigationPropWithUndefinedTypeThrows(string query)
+        {
+            // Arrange
+            var odataQueryOptionParser = new ODataQueryOptionParser(HardCodedTestModel.TestModel,
+                HardCodedTestModel.GetDogType(), HardCodedTestModel.GetDogsSet(),
+                new Dictionary<string, string>()
+                {
+                    {"$expand", query}
+                });
+
+            // Act
+            Action action = () => odataQueryOptionParser.ParseSelectAndExpand();
+
+            // Assert
+
+            // Exception: The type Fully.Qualified.Namespace.UndefinedType is not defined in the model.
+            action.Throws<ODataException>(ODataErrorStrings.ExpandItemBinder_CannotFindType("Fully.Qualified.Namespace.UndefinedType"));
         }
 
         [Fact]

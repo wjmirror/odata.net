@@ -79,7 +79,12 @@ namespace Microsoft.OData.Edm
 
             string fullyQualifiedName = model.ReplaceAlias(qualifiedName);
 
-            return FindAcrossModels(model, fullyQualifiedName, findType, RegistrationHelper.CreateAmbiguousTypeBinding);  // search built-in EdmCoreModel and CoreVocabularyModel.
+            // search built-in EdmCoreModel and CoreVocabularyModel.
+            return FindAcrossModels(
+                model,
+                fullyQualifiedName,
+                findType,
+                (first, second) => RegistrationHelper.CreateAmbiguousTypeBinding(first, second));
         }
 
         /// <summary>
@@ -136,7 +141,13 @@ namespace Microsoft.OData.Edm
             EdmUtil.CheckArgumentNull(model, "model");
             EdmUtil.CheckArgumentNull(qualifiedName, "qualifiedName");
 
-            return FindAcrossModels(model, qualifiedName, findTerm, RegistrationHelper.CreateAmbiguousTermBinding);
+            string fullyQualifiedName = model.ReplaceAlias(qualifiedName);
+
+            return FindAcrossModels(
+                model,
+                fullyQualifiedName,
+                findTerm,
+                (first, second) => RegistrationHelper.CreateAmbiguousTermBinding(first, second));
         }
 
         /// <summary>
@@ -189,7 +200,11 @@ namespace Microsoft.OData.Edm
             EdmUtil.CheckArgumentNull(model, "model");
             EdmUtil.CheckArgumentNull(qualifiedName, "qualifiedName");
 
-            return FindAcrossModels(model, qualifiedName, findEntityContainer, RegistrationHelper.CreateAmbiguousEntityContainerBinding);
+            return FindAcrossModels(
+                model,
+                qualifiedName,
+                findEntityContainer,
+                (first, second) => RegistrationHelper.CreateAmbiguousEntityContainerBinding(first, second));
         }
 
         /// <summary>
@@ -235,10 +250,29 @@ namespace Microsoft.OData.Edm
             EdmUtil.CheckArgumentNull(model, "model");
             EdmUtil.CheckArgumentNull(element, "element");
 
+            VocabularyAnnotationCache cache = null;
+            bool isImmutable = model.IsImmutable();
+
+            if (isImmutable)
+            {
+                cache = model.GetVocabularyAnnotationCache();
+                if (cache.TryGetVocabularyAnnotations(element, out IEnumerable<IEdmVocabularyAnnotation> annotations))
+                {
+                    return annotations;
+                }
+            }
+
             IEnumerable<IEdmVocabularyAnnotation> result = model.FindVocabularyAnnotationsIncludingInheritedAnnotations(element);
             foreach (IEdmModel referencedModel in model.ReferencedModels)
             {
                 result = result.Concat(referencedModel.FindVocabularyAnnotationsIncludingInheritedAnnotations(element));
+            }
+
+            if (isImmutable)
+            {
+                List<IEdmVocabularyAnnotation> cachedAnnotations = result.ToList();
+                cache.AddVocabularyAnnotations(element, cachedAnnotations);
+                return cachedAnnotations;
             }
 
             return result;
@@ -278,9 +312,10 @@ namespace Microsoft.OData.Edm
 
             List<T> result = null;
 
-            foreach (T annotation in model.FindVocabularyAnnotations(element).OfType<T>())
+            // this loop runs in a hot path, we avoid using OfType<T>() to avoid the extra allocations of OfTypeIterator
+            foreach (IEdmVocabularyAnnotation item in model.FindVocabularyAnnotations(element))
             {
-                if (annotation.Term == term && (qualifier == null || qualifier == annotation.Qualifier))
+                if (item is T annotation && annotation.Term == term && (qualifier == null || qualifier == annotation.Qualifier))
                 {
                     if (result == null)
                     {
@@ -332,12 +367,17 @@ namespace Microsoft.OData.Edm
 
             if (EdmUtil.TryGetNamespaceNameFromQualifiedName(termName, out namespaceName, out name))
             {
-                foreach (T annotation in model.FindVocabularyAnnotations(element).OfType<T>())
+                // this loop runs in a hot path, we avoid using OfType<T>() to avoid the extra allocations of OfTypeIterator
+
+                foreach (IEdmVocabularyAnnotation item in model.FindVocabularyAnnotations(element))
                 {
-                    IEdmTerm annotationTerm = annotation.Term;
-                    if (annotationTerm.Namespace == namespaceName && annotationTerm.Name == name && (qualifier == null || qualifier == annotation.Qualifier))
+                    if (item is T annotation)
                     {
-                        yield return annotation;
+                        IEdmTerm annotationTerm = annotation.Term;
+                        if (annotationTerm.Namespace == namespaceName && annotationTerm.Name == name && (qualifier == null || qualifier == annotation.Qualifier))
+                        {
+                            yield return annotation;
+                        }
                     }
                 }
             }
@@ -1114,6 +1154,56 @@ namespace Microsoft.OData.Edm
             EdmUtil.CheckArgumentNull(converter, "converter");
 
             model.SetPrimitiveValueConverter(typeDefinition.Definition, converter);
+        }
+
+        /// <summary>
+        /// Marks the model as immutable. This may enable optimizations
+        /// that assume the model does not get modified. It is the responsibility
+        /// of the caller to ensure that the underlying EDM model is not modified after calling
+        /// this method.
+        /// </summary>
+        /// <param name="model">The model involved</param>
+        public static void MarkAsImmutable(this IEdmModel model)
+        {
+            EdmUtil.CheckArgumentNull(model, "model");
+
+            // it doesn't matter what value we store, so long as it's not null
+            model.SetAnnotationValue(model, EdmConstants.InternalUri, CsdlConstants.IsImmutable, new object());
+        }
+
+        /// <summary>
+        /// Checks whether or not the model has been marked as immutable,
+        /// signifying that it does not change. The model is marked as
+        /// immutable by calling <see cref="MarkAsImmutable(IEdmModel)"/>
+        /// </summary>
+        /// <param name="model">The model involved</param>
+        /// <returns>Whether or not the model has been marked as immutable</returns>
+        public static bool IsImmutable(this IEdmModel model)
+        {
+            EdmUtil.CheckArgumentNull(model, "model");
+
+            object value = model.GetAnnotationValue(model, EdmConstants.InternalUri, CsdlConstants.IsImmutable);
+            return value != null;
+        }
+
+        /// <summary>
+        /// Gets the cache used to store and retrieve vocabulary annotations
+        /// of elements in this model.
+        /// </summary>
+        /// <param name="model">The model for which to retrieve the cache</param>
+        /// <returns>The vocabulary annotations cache for the model</returns>
+        internal static VocabularyAnnotationCache GetVocabularyAnnotationCache(this IEdmModel model)
+        {
+            EdmUtil.CheckArgumentNull(model, "model");
+
+            VocabularyAnnotationCache cache = model.GetAnnotationValue<VocabularyAnnotationCache>(model);
+            if (cache == null)
+            {
+                cache = new VocabularyAnnotationCache();
+                model.SetAnnotationValue<VocabularyAnnotationCache>(model, cache);
+            }
+
+            return cache;
         }
 
         #endregion
@@ -2718,11 +2808,16 @@ namespace Microsoft.OData.Edm
             if (list != null && mappings != null && idx > 0)
             {
                 var typeAlias = name.Substring(0, idx);
-                var ns = list.FirstOrDefault(n =>
+                // this runs in a hot path, hence the use of for-loop instead of LINQ
+                string ns = null;
+                for (int i = 0; i < list.Count; i++)
                 {
-                    string alias;
-                    return mappings.TryGetValue(n, out alias) && alias == typeAlias;
-                });
+                    if (mappings.TryGetValue(list[i], out string alias) && alias == typeAlias)
+                    {
+                        ns = list[i];
+                        break;
+                    }
+                }
 
                 return (ns != null) ? string.Format(CultureInfo.InvariantCulture, "{0}{1}", ns, name.Substring(idx)) : name;
             }
@@ -2864,8 +2959,10 @@ namespace Microsoft.OData.Edm
             relativeNavigations = null;
             lastEntityType = null;
 
-            var pathItems = pathExpression.PathSegments.ToList();
-            if (pathItems.Count < 1)
+            var pathItems = pathExpression.PathSegments;
+            string bindingParameterName = pathItems.FirstOrDefault();
+
+            if (bindingParameterName == null)
             {
                 foundErrors.Add(new EdmError(element.Location(), EdmErrorCode.OperationWithInvalidEntitySetPathMissingCompletePath, Strings.EdmModel_Validator_Semantic_InvalidEntitySetPathMissingBindingParameterName(CsdlConstants.Attribute_EntitySetPath)));
                 return false;
@@ -2879,8 +2976,7 @@ namespace Microsoft.OData.Edm
             }
 
             bool foundRelativePath = true;
-
-            string bindingParameterName = pathItems.First();
+                        
             if (parameter.Name != bindingParameterName)
             {
                 foundErrors.Add(
@@ -3009,7 +3105,7 @@ namespace Microsoft.OData.Edm
             return (segmentType.IsCollection() ? segmentType.AsCollection().ElementType() : segmentType).AsEntity().EntityDefinition();
         }
 
-        internal static IEnumerable<IEdmEntityContainerElement> AllElements(this IEdmEntityContainer container, int depth = ContainerExtendsMaxDepth)
+        public static IEnumerable<IEdmEntityContainerElement> AllElements(this IEdmEntityContainer container, int depth = ContainerExtendsMaxDepth)
         {
             if (depth <= 0)
             {

@@ -150,7 +150,6 @@ namespace Microsoft.OData.Client
             Debug.Assert((this.CompletedSynchronously && this.IsCompleted) || !this.CompletedSynchronously, "sync without complete");
         }
 
-#if !PORTABLELIB  // Synchronous methods not available
         /// <summary>
         /// Synchronous batch request
         /// </summary>
@@ -185,7 +184,6 @@ namespace Microsoft.OData.Client
                 }
             }
         }
-#endif
 
         /// <summary>Read and store response data for the current change</summary>
         /// <param name="pereq">The completed per request object</param>
@@ -370,12 +368,28 @@ namespace Microsoft.OData.Client
 
                     for (int i = 0; i < this.ChangedEntries.Count; ++i)
                     {
-                        if (Util.IsBatchWithIndependentOperations(this.Options))
+                        Descriptor descriptor = this.ChangedEntries[i];
+                        bool isBatchWithIndependentOperations = Util.IsBatchWithIndependentOperations(this.Options);
+
+                        if (isBatchWithIndependentOperations)
                         {
-                            this.batchWriter.WriteStartChangeset();
+                            if(descriptor.ChangeSetId != null)
+                            {
+                                this.batchWriter.WriteStartChangeset(descriptor.ChangeSetId);
+                            }
+                            else
+                            {
+                                this.batchWriter.WriteStartChangeset();
+                            }
                         }
 
-                        Descriptor descriptor = this.ChangedEntries[i];
+                        // In BatchWithIndependentOperations, we use atomicityGroup(in this case changeSetId)
+                        // as the dependsOn property
+                        if(descriptor.DependsOnIds != null && isBatchWithIndependentOperations)
+                        {
+                            descriptor.DependsOnIds = descriptor.DependsOnChangeSetIds;
+                        }
+
                         if (descriptor.ContentGeneratedForSave)
                         {
                             continue;

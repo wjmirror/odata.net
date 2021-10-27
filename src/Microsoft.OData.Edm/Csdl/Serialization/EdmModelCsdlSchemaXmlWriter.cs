@@ -32,19 +32,28 @@ namespace Microsoft.OData.Edm.Csdl.Serialization
             this.edmxNamespace = CsdlConstants.SupportedEdmxVersions[edmVersion];
         }
 
-        internal void WriteReferenceElementHeader(IEdmReference reference)
+        internal override void WriteReferenceElementHeader(IEdmReference reference)
         {
             // e.g. <edmx:Reference Uri="http://host/schema/VipCustomer.xml">
             this.xmlWriter.WriteStartElement(CsdlConstants.Prefix_Edmx, CsdlConstants.Element_Reference, this.edmxNamespace);
             this.WriteRequiredAttribute(CsdlConstants.Attribute_Uri, reference.Uri, EdmValueWriter.UriAsXml);
         }
 
-        internal void WriteIncludeElement(IEdmInclude include)
+        internal override void WriteReferenceElementEnd(IEdmReference reference)
+        {
+            this.xmlWriter.WriteEndElement();
+        }
+
+        internal override void WritIncludeElementHeader(IEdmInclude include)
         {
             // e.g. <edmx:Include Namespace="NS.Ref1" Alias="VPCT" />
             this.xmlWriter.WriteStartElement(CsdlConstants.Prefix_Edmx, CsdlConstants.Element_Include, this.edmxNamespace);
             this.WriteRequiredAttribute(CsdlConstants.Attribute_Namespace, include.Namespace, EdmValueWriter.StringAsXml);
             this.WriteRequiredAttribute(CsdlConstants.Attribute_Alias, include.Alias, EdmValueWriter.StringAsXml);
+        }
+
+        internal override void WriteIncludeElementEnd(IEdmInclude include)
+        {
             this.xmlWriter.WriteEndElement();
         }
 
@@ -427,6 +436,23 @@ namespace Microsoft.OData.Edm.Csdl.Serialization
             }
         }
 
+        internal static bool IsUsingDefaultValue(IEdmVocabularyAnnotation annotation)
+        {
+            EdmVocabularyAnnotation edmAnnotation = annotation as EdmVocabularyAnnotation;
+            if (edmAnnotation != null)
+            {
+                return edmAnnotation.UseDefault;
+            }
+
+            CsdlSemanticsVocabularyAnnotation csdlAnnotation = annotation as CsdlSemanticsVocabularyAnnotation;
+            if (csdlAnnotation != null)
+            {
+                return csdlAnnotation.UseDefault;
+            }
+
+            return false;
+        }
+
         internal override void WriteInlineExpression(IEdmExpression expression)
         {
             IEdmPathExpression pathExpression = expression as IEdmPathExpression;
@@ -493,8 +519,10 @@ namespace Microsoft.OData.Edm.Csdl.Serialization
             this.xmlWriter.WriteStartElement(CsdlConstants.Element_Annotation);
             this.WriteRequiredAttribute(CsdlConstants.Attribute_Term, annotation.Term, this.TermAsXml);
             this.WriteOptionalAttribute(CsdlConstants.Attribute_Qualifier, annotation.Qualifier, EdmValueWriter.StringAsXml);
-            if (isInline)
+
+            if (isInline && !IsUsingDefaultValue(annotation))
             {
+                // in xml format, we can (should) skip writing the expression value if it matches the term default value.
                 this.WriteInlineExpression(annotation.Value);
             }
         }

@@ -9,6 +9,7 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
     <RestorePackages>true</RestorePackages>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
   </PropertyGroup>
   
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
@@ -63,6 +64,18 @@
     <ProjectReference Include="..\..\..\src\Microsoft.Spatial\Microsoft.Spatial.csproj" />
     <ProjectReference Include="..\..\Common\Microsoft.Test.OData.DependencyInjection\Microsoft.Test.OData.DependencyInjection.csproj" />
     <ProjectReference Include="..\Microsoft.OData.TestCommon\Microsoft.OData.TestCommon.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'netcoreapp2.1'">
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces">
+      <Version>5.0.0</Version>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'netcoreapp3.1'">
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces">
+      <Version>5.0.0</Version>
+    </PackageReference>
   </ItemGroup>
 
 </Project>

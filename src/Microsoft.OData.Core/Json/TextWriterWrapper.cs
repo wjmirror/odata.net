@@ -11,6 +11,7 @@ namespace Microsoft.OData.Json
     using System.Diagnostics;
     using System.IO;
     using System.Text;
+    using System.Threading.Tasks;
     #endregion Namespaces
 
     /// <summary>
@@ -74,6 +75,31 @@ namespace Microsoft.OData.Json
         public override void Flush()
         {
             this.writer.Flush();
+        }
+
+
+        /// <summary>
+        /// Increases the level of indentation applied to the output asynchronously.
+        /// </summary>
+        public virtual Task IncreaseIndentationAsync()
+        {
+            return TaskUtils.CompletedTask;
+        }
+
+        /// <summary>
+        /// Decreases the level of indentation applied to the output asynchronously.
+        /// </summary>
+        public virtual Task DecreaseIndentationAsync()
+        {
+            return TaskUtils.CompletedTask;
+        }
+
+        /// <summary>
+        /// Clears the buffer of the current writer asynchronously.
+        /// </summary>
+        public override Task FlushAsync()
+        {
+            return this.writer.FlushAsync();
         }
 
         /// <summary>

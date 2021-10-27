@@ -28,8 +28,8 @@ namespace Microsoft.OData
         /// </summary>
         /// <param name="stream">The underlying stream to write the message to.</param>
         /// <param name="listener">Listener interface to be notified of operation changes.</param>
-        internal ODataWriteStream(Stream stream, IODataStreamListener listener)
-            : base(listener)
+        internal ODataWriteStream(Stream stream, IODataStreamListener listener, bool synchronous = true)
+            : base(listener, synchronous)
         {
             Debug.Assert(stream != null, "stream != null");
             this.stream = stream;
@@ -139,6 +139,16 @@ namespace Microsoft.OData
         }
 
         /// <summary>
+        /// Asynchronously flush the stream to the underlying stream
+        /// </summary>
+        public override async Task FlushAsync(CancellationToken cancellationToken)
+        {
+            this.ValidateNotDisposed();
+            await this.stream.FlushAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        /// <summary>
         /// Dispose the operation stream.
         /// </summary>
         /// <param name="disposing">If 'true' this method is called from user code; if 'false' it is called by the runtime.</param>
@@ -152,5 +162,18 @@ namespace Microsoft.OData
 
             base.Dispose(disposing);
         }
+
+#if NETSTANDARD2_0
+        /// <summary>
+        /// Encapsulates the common asynchronous cleanup operations.
+        /// </summary>
+        /// <returns>A task representing the asynchronous operation.</returns>
+        protected override ValueTask DisposeAsyncCore()
+        {
+            this.stream = null;
+
+            return base.DisposeAsyncCore();
+        }
+#endif
     }
 }

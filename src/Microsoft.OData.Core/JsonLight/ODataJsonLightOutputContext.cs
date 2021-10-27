@@ -12,7 +12,6 @@ namespace Microsoft.OData.JsonLight
     using System.Diagnostics.CodeAnalysis;
     using System.IO;
     using System.Threading.Tasks;
-    using Microsoft.OData.Buffers;
     using Microsoft.OData.Edm;
     using Microsoft.OData.Json;
     #endregion Namespaces
@@ -53,6 +52,9 @@ namespace Microsoft.OData.JsonLight
         /// <remarks>This field is also used to determine if the output context has been disposed already.</remarks>
         private IJsonWriter jsonWriter;
 
+        /// <summary>The asynchronous JSON writer to write to.</summary>
+        private IJsonWriterAsync asynchronousJsonWriter;
+
         /// <summary>
         /// The oracle to use to determine the type name to write for entries and values.
         /// </summary>
@@ -62,6 +64,14 @@ namespace Microsoft.OData.JsonLight
         /// The handler to manage property cache.
         /// </summary>
         private PropertyCacheHandler propertyCacheHandler;
+
+        /// <summary>
+        /// The concrete <see cref="JsonWriter"/> instance initialized when
+        /// creating either synchronous or asynchronous writer.
+        /// Used to guarantee that the synchronous and asynchronous writers share the same scope(s) specifically
+        /// because the synchronous writer is used to write spatial data in both synchronous and asynchronous scenarios.
+        /// </summary>
+        private JsonWriter concreteJsonWriter;
 
         /// <summary>
         /// Constructor.
@@ -96,10 +106,15 @@ namespace Microsoft.OData.JsonLight
                 // COMPAT 2: JSON indentation - WCFDS indents only partially, it inserts newlines but doesn't actually insert spaces for indentation
                 // in here we allow the user to specify if true indentation should be used or if the limited functionality is enough.
                 this.jsonWriter = CreateJsonWriter(this.Container, this.textWriter, messageInfo.MediaType.HasIeee754CompatibleSetToTrue(), messageWriterSettings);
+                this.asynchronousJsonWriter = CreateAsynchronousJsonWriter(
+                    this.Container,
+                    this.textWriter,
+                    messageInfo.MediaType.HasIeee754CompatibleSetToTrue(),
+                    messageWriterSettings);
             }
             catch (Exception e)
             {
-                // Dispose the message stream if we failed to create the input context.
+                // Dispose the message stream if we failed to create the output context.
                 if (ExceptionUtils.IsCatchableExceptionType(e))
                 {
                     this.messageOutputStream.Dispose();
@@ -133,6 +148,7 @@ namespace Microsoft.OData.JsonLight
             this.textWriter = textWriter;
             bool ieee754CompatibleSetToTrue = (messageInfo.MediaType != null) ? messageInfo.MediaType.HasIeee754CompatibleSetToTrue() : false;
             this.jsonWriter = CreateJsonWriter(messageInfo.Container, textWriter, ieee754CompatibleSetToTrue, messageWriterSettings);
+            this.asynchronousJsonWriter = CreateAsynchronousJsonWriter(messageInfo.Container, textWriter, ieee754CompatibleSetToTrue, messageWriterSettings);
             this.metadataLevel = new JsonMinimalMetadataLevel();
             this.propertyCacheHandler = new PropertyCacheHandler();
         }
@@ -146,6 +162,18 @@ namespace Microsoft.OData.JsonLight
             {
                 Debug.Assert(this.jsonWriter != null, "Trying to get JsonWriter while none is available.");
                 return this.jsonWriter;
+            }
+        }
+
+        /// <summary>
+        /// Returns the <see cref="JsonWriter"/> which is to be used to write the content of the message asynchronously.
+        /// </summary>
+        public IJsonWriterAsync AsynchronousJsonWriter
+        {
+            get
+            {
+                Debug.Assert(this.asynchronousJsonWriter != null, "Trying to get asynchronous JsonWriter while none is available.");
+                return this.asynchronousJsonWriter;
             }
         }
 
@@ -402,16 +430,14 @@ namespace Microsoft.OData.JsonLight
         /// <param name="property">The property to write</param>
         /// <returns>A task representing the asynchronous operation of writing the property.</returns>
         /// <remarks>It is the responsibility of this method to flush the output before the task finishes.</remarks>
-        public override Task WritePropertyAsync(ODataProperty property)
+        public override async Task WritePropertyAsync(ODataProperty property)
         {
             this.AssertAsynchronous();
 
-            return TaskUtils.GetTaskForSynchronousOperationReturningTask(
-                () =>
-                {
-                    this.WritePropertyImplementation(property);
-                    return this.FlushAsync();
-                });
+            await this.WritePropertyImplementationAsync(property)
+                .ConfigureAwait(false);
+            await this.FlushAsync()
+                .ConfigureAwait(false);
         }
 
         /// <summary>
@@ -441,16 +467,14 @@ namespace Microsoft.OData.JsonLight
         /// </param>
         /// <returns>A task representing the asynchronous operation of writing the error.</returns>
         /// <remarks>It is the responsibility of this method to flush the output before the task finishes.</remarks>
-        public override Task WriteErrorAsync(ODataError error, bool includeDebugInformation)
+        public override async Task WriteErrorAsync(ODataError error, bool includeDebugInformation)
         {
             this.AssertAsynchronous();
 
-            return TaskUtils.GetTaskForSynchronousOperationReturningTask(
-                () =>
-                {
-                    this.WriteErrorImplementation(error, includeDebugInformation);
-                    return this.FlushAsync();
-                });
+            await this.WriteErrorImplementationAsync(error, includeDebugInformation)
+                .ConfigureAwait(false);
+            await this.FlushAsync()
+                .ConfigureAwait(false);
         }
 
         /// <summary>
@@ -483,22 +507,21 @@ namespace Microsoft.OData.JsonLight
         /// </summary>
         /// <returns>Task which represents the pending flush operation.</returns>
         /// <remarks>The method should not throw directly if the flush operation itself fails, it should instead return a faulted task.</remarks>
-        public Task FlushAsync()
+        public async Task FlushAsync()
         {
             this.AssertAsynchronous();
 
-            return TaskUtils.GetTaskForSynchronousOperationReturningTask(
-                () =>
-                {
-                    // JsonWriter.Flush will call the underlying TextWriter.Flush.
-                    // The TextWriter.Flush (Which is in fact StreamWriter.Flush) will call the underlying Stream.Flush.
-                    // In the async case the underlying stream is the async buffered stream, which ignores Flush call.
-                    this.jsonWriter.Flush();
+            // JsonWriter.FlushAsync will call the underlying TextWriter.FlushAsync.
+            // The TextWriter.FlushAsync will call the underlying Stream.FlushAsync.
+            // The underlying stream is the async buffered stream, which ignores FlushAsync call.
+            await this.asynchronousJsonWriter.FlushAsync()
+                .ConfigureAwait(false);
 
-                    Debug.Assert(this.asynchronousOutputStream != null, "In async writing we must have the async buffered stream.");
-                    return this.asynchronousOutputStream.FlushAsync();
-                })
-                .FollowOnSuccessWithTask((asyncBufferedStreamFlushTask) => this.messageOutputStream.FlushAsync());
+            Debug.Assert(this.asynchronousOutputStream != null, "In async writing we must have the async buffered stream.");
+            await this.asynchronousOutputStream.FlushAsync()
+                .ConfigureAwait(false);
+            await this.messageOutputStream.FlushAsync()
+                .ConfigureAwait(false);
         }
 
          /// <summary>
@@ -606,16 +629,14 @@ namespace Microsoft.OData.JsonLight
         /// the in-stream error is written.
         /// It is the responsibility of this method to flush the output before the task finishes.
         /// </remarks>
-        internal override Task WriteInStreamErrorAsync(ODataError error, bool includeDebugInformation)
+        internal override async Task WriteInStreamErrorAsync(ODataError error, bool includeDebugInformation)
         {
             this.AssertAsynchronous();
 
-            return TaskUtils.GetTaskForSynchronousOperationReturningTask(
-                () =>
-                {
-                    this.WriteInStreamErrorImplementation(error, includeDebugInformation);
-                    return this.FlushAsync();
-                });
+            await this.WriteInStreamErrorImplementationAsync(error, includeDebugInformation)
+                .ConfigureAwait(false);
+            await this.FlushAsync()
+                .ConfigureAwait(false);
         }
 
         /// <summary>
@@ -666,16 +687,14 @@ namespace Microsoft.OData.JsonLight
         /// <param name="serviceDocument">The service document to write.</param>
         /// <returns>A task representing the asynchronous operation of writing the service document.</returns>
         /// <remarks>It is the responsibility of this method to flush the output before the task finishes.</remarks>
-        internal override Task WriteServiceDocumentAsync(ODataServiceDocument serviceDocument)
+        internal override async Task WriteServiceDocumentAsync(ODataServiceDocument serviceDocument)
         {
             this.AssertAsynchronous();
 
-            return TaskUtils.GetTaskForSynchronousOperationReturningTask(
-                () =>
-                {
-                    this.WriteServiceDocumentImplementation(serviceDocument);
-                    return this.FlushAsync();
-                });
+            await this.WriteServiceDocumentImplementationAsync(serviceDocument)
+                .ConfigureAwait(false);
+            await this.FlushAsync()
+                .ConfigureAwait(false);
         }
 
         /// <summary>
@@ -697,16 +716,14 @@ namespace Microsoft.OData.JsonLight
         /// <param name="links">The entity reference links to write as message payload.</param>
         /// <returns>A task representing the asynchronous writing of the entity reference links.</returns>
         /// <remarks>It is the responsibility of this method to flush the output before the task finishes.</remarks>
-        internal override Task WriteEntityReferenceLinksAsync(ODataEntityReferenceLinks links)
+        internal override async Task WriteEntityReferenceLinksAsync(ODataEntityReferenceLinks links)
         {
             this.AssertAsynchronous();
 
-            return TaskUtils.GetTaskForSynchronousOperationReturningTask(
-                () =>
-                {
-                    this.WriteEntityReferenceLinksImplementation(links);
-                    return this.FlushAsync();
-                });
+            await this.WriteEntityReferenceLinksImplementationAsync(links)
+                .ConfigureAwait(false);
+            await this.FlushAsync()
+                .ConfigureAwait(false);
         }
 
         /// <summary>
@@ -728,16 +745,14 @@ namespace Microsoft.OData.JsonLight
         /// <param name="link">The link result to write as message payload.</param>
         /// <returns>A running task representing the writing of the link.</returns>
         /// <remarks>It is the responsibility of this method to flush the output before the task finishes.</remarks>
-        internal override Task WriteEntityReferenceLinkAsync(ODataEntityReferenceLink link)
+        internal override async Task WriteEntityReferenceLinkAsync(ODataEntityReferenceLink link)
         {
             this.AssertAsynchronous();
 
-            return TaskUtils.GetTaskForSynchronousOperationReturningTask(
-                () =>
-                {
-                    this.WriteEntityReferenceLinkImplementation(link);
-                    return this.FlushAsync();
-                });
+            await this.WriteEntityReferenceLinkImplementationAsync(link)
+                .ConfigureAwait(false);
+            await this.FlushAsync()
+                .ConfigureAwait(false);
         }
 
         /// <summary>
@@ -797,27 +812,116 @@ namespace Microsoft.OData.JsonLight
             base.Dispose(disposing);
         }
 
-        private static IJsonWriter CreateJsonWriter(IServiceProvider container, TextWriter textWriter, bool isIeee754Compatible, ODataMessageWriterSettings writerSettings)
+        /// <summary>
+        /// Creates a new JSON writer of <see cref="IJsonWriter"/>.
+        /// </summary>
+        /// <param name="container">The dependency injection container to get related services.</param>
+        /// <param name="textWriter">The text writer to write to.</param>
+        /// <param name="isIeee754Compatible">true if the writer should write large integers as strings.</param>
+        /// <param name="writerSettings">Configuration settings for the OData writer.</param>
+        /// <returns>A JSON writer.</returns>
+        /// <remarks>Asynchronous support is not implemented in Microsoft.Spatial library.
+        /// To write spatial data, we rely on the synchronous PrimitiveConverter.Instance.WriteJsonLight(object, IJsonWriter) method.
+        /// When writing asynchronously we wrap this method in a Task. WriteJsonLight method takes an
+        /// IJsonWriter parameter while the asynchronous writer is declared as IJsonWriterAsync.
+        /// However, JsonWriter class implements both IJsonWriter and IJsonWriterAsync.
+        /// To guarantee that when the synchronous writer is called to write spatial data it shares
+        /// the same scope(s) as the asynchronous writer, we initialize them to the same concrete JsonWriter instance.
+        /// We only do this when the dependency injection container is uninitialized or
+        /// when the JSON writer factory is DefaultJsonWriterFactory - since both CreateJsonWriter and
+        /// CreateAsynchronousJsonWriter methods of that factory return an instance of JsonWriter.
+        /// Merging IJsonWriter and IJsonWriterAsync interface in a major release will simplify this.</remarks>
+        private IJsonWriter CreateJsonWriter(
+            IServiceProvider container,
+            TextWriter textWriter,
+            bool isIeee754Compatible,
+            ODataMessageWriterSettings writerSettings)
         {
             IJsonWriter jsonWriter;
             if (container == null)
             {
+                if (this.concreteJsonWriter != null)
+                {
+                    return this.concreteJsonWriter;
+                }
+
                 jsonWriter = new JsonWriter(textWriter, isIeee754Compatible);
             }
             else
             {
                 IJsonWriterFactory jsonWriterFactory = container.GetRequiredService<IJsonWriterFactory>();
+                if (jsonWriterFactory is DefaultJsonWriterFactory && this.concreteJsonWriter != null)
+                {
+                    return this.concreteJsonWriter;
+                }
+
                 jsonWriter = jsonWriterFactory.CreateJsonWriter(textWriter, isIeee754Compatible);
                 Debug.Assert(jsonWriter != null, "jsonWriter != null");
             }
 
-            JsonWriter writer = jsonWriter as JsonWriter;
-            if (writer != null && writerSettings.ArrayPool != null)
+            this.concreteJsonWriter = jsonWriter as JsonWriter;
+            if (this.concreteJsonWriter != null && writerSettings.ArrayPool != null)
             {
-                writer.ArrayPool = writerSettings.ArrayPool;
+                this.concreteJsonWriter.ArrayPool = writerSettings.ArrayPool;
             }
 
             return jsonWriter;
+        }
+
+        /// <summary>
+        /// Creates a new JSON writer of <see cref="IJsonWriterAsync"/> with support for writing asynchronously.
+        /// </summary>
+        /// <param name="container">The dependency injection container to get related services.</param>
+        /// <param name="textWriter">The text writer to write to.</param>
+        /// <param name="isIeee754Compatible">true if the writer should write large integers as strings.</param>
+        /// <param name="writerSettings">Configuration settings for the OData writer.</param>
+        /// <returns>An asynchronous JSON writer.</returns>
+        /// <remarks>Asynchronous support is not implemented in Microsoft.Spatial library.
+        /// To write spatial data, we rely on the synchronous PrimitiveConverter.Instance.WriteJsonLight(object, IJsonWriter) method.
+        /// When writing asynchronously we wrap this method in a Task. WriteJsonLight method takes an
+        /// IJsonWriter parameter while the asynchronous writer is declared as IJsonWriterAsync.
+        /// However, JsonWriter class implements both IJsonWriter and IJsonWriterAsync.
+        /// To guarantee that when the synchronous writer is called to write spatial data it shares
+        /// the same scope(s) as the asynchronous writer, we initialize them to the same concrete JsonWriter instance.
+        /// We only do this when the dependency injection container is uninitialized or
+        /// when the JSON writer factory is DefaultJsonWriterFactory - since both CreateJsonWriter and
+        /// CreateAsynchronousJsonWriter methods of that factory return an instance of JsonWriter.
+        /// Merging IJsonWriter and IJsonWriterAsync interface in a major release will simplify this.</remarks>
+        private IJsonWriterAsync CreateAsynchronousJsonWriter(
+            IServiceProvider container,
+            TextWriter textWriter,
+            bool isIeee754Compatible,
+            ODataMessageWriterSettings writerSettings)
+        {
+            IJsonWriterAsync asynchronousJsonWriter;
+            if (container == null)
+            {
+                if (this.concreteJsonWriter != null)
+                {
+                    return this.concreteJsonWriter;
+                }
+
+                asynchronousJsonWriter = new JsonWriter(textWriter, isIeee754Compatible);
+            }
+            else
+            {
+                IJsonWriterFactoryAsync asynchronousJsonWriterFactory = container.GetRequiredService<IJsonWriterFactoryAsync>();
+                if (asynchronousJsonWriterFactory is DefaultJsonWriterFactory && this.concreteJsonWriter != null)
+                {
+                    return this.concreteJsonWriter;
+                }
+
+                asynchronousJsonWriter = asynchronousJsonWriterFactory.CreateAsynchronousJsonWriter(textWriter, isIeee754Compatible);
+                Debug.Assert(asynchronousJsonWriter != null, "asynchronousJsonWriter != null");
+            }
+
+            this.concreteJsonWriter = asynchronousJsonWriter as JsonWriter;
+            if (this.concreteJsonWriter != null && writerSettings.ArrayPool != null)
+            {
+                this.concreteJsonWriter.ArrayPool = writerSettings.ArrayPool;
+            }
+
+            return asynchronousJsonWriter;
         }
 
         /// <summary>
@@ -916,6 +1020,32 @@ namespace Microsoft.OData.JsonLight
         }
 
         /// <summary>
+        /// Asynchronously writes an in-stream error.
+        /// </summary>
+        /// <param name="error">The error to write.</param>
+        /// <param name="includeDebugInformation">
+        /// A flag indicating whether debug information (e.g., the inner error from the <paramref name="error"/>) should
+        /// be included in the payload. This should only be used in debug scenarios.
+        /// </param>
+        /// <returns>A task that represents the asynchronous write operation.</returns>
+        private async Task WriteInStreamErrorImplementationAsync(ODataError error, bool includeDebugInformation)
+        {
+            if (this.outputInStreamErrorListener != null)
+            {
+                await this.outputInStreamErrorListener.OnInStreamErrorAsync()
+                    .ConfigureAwait(false);
+            }
+
+            JsonLightInstanceAnnotationWriter instanceAnnotationWriter = new JsonLightInstanceAnnotationWriter(new ODataJsonLightValueSerializer(this), this.TypeNameOracle);
+            await ODataJsonWriterUtils.WriteErrorAsync(
+                this.AsynchronousJsonWriter,
+                instanceAnnotationWriter.WriteInstanceAnnotationsForErrorAsync,
+                error,
+                includeDebugInformation,
+                this.MessageWriterSettings.MessageQuotas.MaxNestingDepth).ConfigureAwait(false);
+        }
+
+        /// <summary>
         /// Writes an <see cref="ODataProperty"/> as message payload.
         /// </summary>
         /// <param name="property">The property to write.</param>
@@ -923,6 +1053,18 @@ namespace Microsoft.OData.JsonLight
         {
             ODataJsonLightPropertySerializer jsonLightPropertySerializer = new ODataJsonLightPropertySerializer(this, /*initContextUriBuilder*/ true);
             jsonLightPropertySerializer.WriteTopLevelProperty(property);
+        }
+
+        /// <summary>
+        /// Asynchronously writes an <see cref="ODataProperty"/> as message payload.
+        /// </summary>
+        /// <param name="property">The property to write.</param>
+        /// <returns>A task that represents the asynchronous write operation.</returns>
+        private async Task WritePropertyImplementationAsync(ODataProperty property)
+        {
+            ODataJsonLightPropertySerializer jsonLightPropertySerializer = new ODataJsonLightPropertySerializer(this, /*initContextUriBuilder*/ true);
+            await jsonLightPropertySerializer.WriteTopLevelPropertyAsync(property)
+                .ConfigureAwait(false);
         }
 
         /// <summary>
@@ -934,6 +1076,19 @@ namespace Microsoft.OData.JsonLight
         {
             ODataJsonLightServiceDocumentSerializer jsonLightServiceDocumentSerializer = new ODataJsonLightServiceDocumentSerializer(this);
             jsonLightServiceDocumentSerializer.WriteServiceDocument(serviceDocument);
+        }
+
+        /// <summary>
+        /// Asynchronously writes a service document with the specified <paramref name="serviceDocument"/>
+        /// as message payload.
+        /// </summary>
+        /// <param name="serviceDocument">The service document to write.</param>
+        /// <returns>A task that represents the asynchronous write operation.</returns>
+        private async Task WriteServiceDocumentImplementationAsync(ODataServiceDocument serviceDocument)
+        {
+            ODataJsonLightServiceDocumentSerializer jsonLightServiceDocumentSerializer = new ODataJsonLightServiceDocumentSerializer(this);
+            await jsonLightServiceDocumentSerializer.WriteServiceDocumentAsync(serviceDocument)
+                .ConfigureAwait(false);
         }
 
         /// <summary>
@@ -951,6 +1106,22 @@ namespace Microsoft.OData.JsonLight
         }
 
         /// <summary>
+        /// Asynchronously writes an <see cref="ODataError"/> as the message payload.
+        /// </summary>
+        /// <param name="error">The error to write.</param>
+        /// <param name="includeDebugInformation">
+        /// A flag indicating whether debug information (e.g., the inner error from the <paramref name="error"/>) should
+        /// be included in the payload. This should only be used in debug scenarios.
+        /// </param>
+        /// <returns>A task that represents the asynchronous write operation.</returns>
+        private async Task WriteErrorImplementationAsync(ODataError error, bool includeDebugInformation)
+        {
+            ODataJsonLightSerializer jsonLightSerializer = new ODataJsonLightSerializer(this, false);
+            await jsonLightSerializer.WriteTopLevelErrorAsync(error, includeDebugInformation)
+                .ConfigureAwait(false);
+        }
+
+        /// <summary>
         /// Writes the result of a $ref query as the message payload.
         /// </summary>
         /// <param name="links">The entity reference links to write as message payload.</param>
@@ -961,6 +1132,18 @@ namespace Microsoft.OData.JsonLight
         }
 
         /// <summary>
+        /// Asynchronously writes the result of a $ref query as the message payload.
+        /// </summary>
+        /// <param name="links">The entity reference links to write as message payload.</param>
+        /// <returns>A task that represents the asynchronous write operation.</returns>
+        private async Task WriteEntityReferenceLinksImplementationAsync(ODataEntityReferenceLinks links)
+        {
+            ODataJsonLightEntityReferenceLinkSerializer jsonLightEntityReferenceLinkSerializer = new ODataJsonLightEntityReferenceLinkSerializer(this);
+            await jsonLightEntityReferenceLinkSerializer.WriteEntityReferenceLinksAsync(links)
+                .ConfigureAwait(false);
+        }
+
+        /// <summary>
         /// Writes a singleton result of a $ref query as the message payload.
         /// </summary>
         /// <param name="link">The entity reference link to write as message payload.</param>
@@ -968,6 +1151,18 @@ namespace Microsoft.OData.JsonLight
         {
             ODataJsonLightEntityReferenceLinkSerializer jsonLightEntityReferenceLinkSerializer = new ODataJsonLightEntityReferenceLinkSerializer(this);
             jsonLightEntityReferenceLinkSerializer.WriteEntityReferenceLink(link);
+        }
+
+        /// <summary>
+        /// Asynchronously writes a singleton result of a $ref query as the message payload.
+        /// </summary>
+        /// <param name="link">The entity reference link to write as message payload.</param>
+        /// <returns>A task that represents the asynchronous write operation.</returns>
+        private async Task WriteEntityReferenceLinkImplementationAsync(ODataEntityReferenceLink link)
+        {
+            ODataJsonLightEntityReferenceLinkSerializer jsonLightEntityReferenceLinkSerializer = new ODataJsonLightEntityReferenceLinkSerializer(this);
+            await jsonLightEntityReferenceLinkSerializer.WriteEntityReferenceLinkAsync(link)
+                .ConfigureAwait(false);
         }
     }
 }

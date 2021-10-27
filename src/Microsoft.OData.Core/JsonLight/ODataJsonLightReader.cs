@@ -202,11 +202,8 @@ namespace Microsoft.OData.JsonLight
                 this.jsonLightInputContext.CreatePropertyAndAnnotationCollector();
 
             // Position the reader on the first node depending on whether we are reading a nested payload or not.
-            ODataPayloadKind payloadKind = this.ReadingDelta
-                ? ODataPayloadKind.Delta
-                : this.ReadingResourceSet ?
-                    ODataPayloadKind.ResourceSet
-                    : ODataPayloadKind.Resource;
+            ODataPayloadKind payloadKind = this.ReadingResourceSet ?
+                this.ReadingDelta ? ODataPayloadKind.Delta : ODataPayloadKind.ResourceSet : ODataPayloadKind.Resource;
 
             return this.jsonLightResourceDeserializer.ReadPayloadStartAsync(
                 payloadKind,
@@ -2060,6 +2057,13 @@ namespace Microsoft.OData.JsonLight
                     this.ReadResourceSetEnd();
                     break;
                 case JsonNodeType.PrimitiveValue:
+                    if (resourceType?.TypeKind == EdmTypeKind.Entity && !resourceType.IsOpen())
+                    {
+                        throw new ODataException(
+                        ODataErrorStrings.ODataJsonReader_CannotReadResourcesOfResourceSet(
+                            this.jsonLightResourceDeserializer.JsonReader.NodeType));
+                    }
+
                     // Is this a stream, or a binary or string value with a collection that the client wants to read as a stream
                     if (!TryReadPrimitiveAsStream(resourceType))
                     {
@@ -2346,7 +2350,7 @@ namespace Microsoft.OData.JsonLight
                 navigationSource = this.CurrentNavigationSource == null
                     ? null
                     : this.CurrentNavigationSource.FindNavigationTarget(navigationProperty,
-                        BindingPathHelper.MatchBindingPath, odataPath.ToList(), out bindingPath);
+                        BindingPathHelper.MatchBindingPath, odataPath.Segments, out bindingPath);
             }
 
             if (navigationProperty != null)

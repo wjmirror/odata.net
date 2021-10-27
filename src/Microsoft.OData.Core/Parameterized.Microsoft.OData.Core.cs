@@ -5224,6 +5224,14 @@ namespace Microsoft.OData {
         }
 
         /// <summary>
+        /// A string like "Only $filter and $search query options are allowed within $count."
+        /// </summary>
+        internal static string UriQueryExpressionParser_IllegalQueryOptioninDollarCount()
+        {
+            return Microsoft.OData.TextRes.GetString(Microsoft.OData.TextRes.UriQueryExpressionParser_IllegalQueryOptioninDollarCount);
+        }
+
+        /// <summary>
         /// A string like "Expecting a Star token but got: '{0}'."
         /// </summary>
         internal static string UriQueryExpressionParser_CannotCreateStarTokenFromNonStar(object p0)
@@ -5504,6 +5512,14 @@ namespace Microsoft.OData {
         internal static string MetadataBinder_PropertyAccessSourceNotSingleValue(object p0)
         {
             return Microsoft.OData.TextRes.GetString(Microsoft.OData.TextRes.MetadataBinder_PropertyAccessSourceNotSingleValue, p0);
+        }
+
+        /// <summary>
+        /// A string like "The next token in a CountSegmentNode must be a collection."
+        /// </summary>
+        internal static string MetadataBinder_CountSegmentNextTokenNotCollectionValue()
+        {
+            return Microsoft.OData.TextRes.GetString(Microsoft.OData.TextRes.MetadataBinder_CountSegmentNextTokenNotCollectionValue);
         }
 
         /// <summary>
@@ -6208,6 +6224,14 @@ namespace Microsoft.OData {
         }
 
         /// <summary>
+        /// A string like "Empty parenthesis not allowed."
+        /// </summary>
+        internal static string UriParser_EmptyParenthesis()
+        {
+            return Microsoft.OData.TextRes.GetString(Microsoft.OData.TextRes.UriParser_EmptyParenthesis);
+        }
+
+        /// <summary>
         /// A string like "Missing select option on property '{0}'. If a parenthesis expression follows a selected property, then at least one query option must be provided."
         /// </summary>
         internal static string UriParser_MissingSelectOption(object p0)
@@ -6394,13 +6418,24 @@ namespace Microsoft.OData {
         }
 
         /// <summary>
-        /// A string like "The last segment, and only the last segment, must be a navigation property in $expand."
+        /// A string like "The last segment, and only the last segment, can be a navigation property in $expand."
         /// </summary>
-        internal static string ODataExpandPath_OnlyLastSegmentMustBeNavigationProperty
+        internal static string ODataExpandPath_OnlyLastSegmentCanBeNavigationProperty
         {
             get
             {
-                return Microsoft.OData.TextRes.GetString(Microsoft.OData.TextRes.ODataExpandPath_OnlyLastSegmentMustBeNavigationProperty);
+                return Microsoft.OData.TextRes.GetString(Microsoft.OData.TextRes.ODataExpandPath_OnlyLastSegmentCanBeNavigationProperty);
+            }
+        }
+
+        /// <summary>
+        /// A string like "The last segment must be a navigation property or type segment in $expand."
+        /// </summary>
+        internal static string ODataExpandPath_LastSegmentMustBeNavigationPropertyOrTypeSegment
+        {
+            get
+            {
+                return Microsoft.OData.TextRes.GetString(Microsoft.OData.TextRes.ODataExpandPath_LastSegmentMustBeNavigationPropertyOrTypeSegment);
             }
         }
 
@@ -6936,6 +6971,28 @@ namespace Microsoft.OData {
             get
             {
                 return Microsoft.OData.TextRes.GetString(Microsoft.OData.TextRes.ExpressionToken_NoPropAllowedAfterRef);
+            }
+        }
+
+        /// <summary>
+        /// A string like "No property is allowed after $count segment."
+        /// </summary>
+        internal static string ExpressionToken_NoPropAllowedAfterDollarCount
+        {
+            get
+            {
+                return Microsoft.OData.TextRes.GetString(Microsoft.OData.TextRes.ExpressionToken_NoPropAllowedAfterDollarCount);
+            }
+        }
+
+        /// <summary>
+        /// A string like "$count is not allowed in $select option."
+        /// </summary>
+        internal static string ExpressionToken_DollarCountNotAllowedInSelect
+        {
+            get
+            {
+                return Microsoft.OData.TextRes.GetString(Microsoft.OData.TextRes.ExpressionToken_DollarCountNotAllowedInSelect);
             }
         }
 

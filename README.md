@@ -115,6 +115,124 @@ You can query the latest nightly NuGet packages using this query: [MAGIC OData q
 
 The release of the component binaries is carried out regularly through [Nuget](http://www.nuget.org/).
 
+### 3.6 Performance benchmarks
+
+#### Installation
+
+The easiest way to run the perf benchmarks is to use the [Microsoft.Crank](https://github.com/dotnet/crank) toolset.
+
+- Install the [Crank controller](https://www.nuget.org/packages/Microsoft.Crank.Controller), the CLI used to run benchmarks:
+
+    ```text
+    dotnet tool install -g Microsoft.Crank.Controller --version "0.2.0-*"
+    ```
+- Install the [Crank agent](https://www.nuget.org/packages/Microsoft.Crank.Agent), service that executes benchmark jobs. This should be installed on the server(s) where the benchmarks will run. Install locally if you intend to run benchmarks locally.
+
+    ```text
+    dotnet tool install -g Microsoft.Crank.Agent --version "0.2.0-*" 
+    ```
+- Verify installation was complete by running:
+
+    ```text
+    crank
+    ```
+
+#### Start the agent
+
+- Start the agent by running the following command.:
+    
+    ```text
+    crank-agent
+    ```
+
+    Once the agent has started, you should see output like:
+
+    ```text
+    Now listening on: http://[::]:5010
+    ...
+    Agent ready, waiting for jobs...
+    ```
+
+#### Run benchmarks locally
+
+- Run benchmarks for different components (reader, writer, batch, URI parser, etc.) using in-memory payloads:
+    
+    ```text
+    crank --config benchmarks.yml --scenario Components --profile local
+    ```
+
+- Run benchmarks for end-to-end scenarios against a local OData service:
+    
+    ```text
+    crank --config benchmarks.yml --scenario Service --profile local
+    ```
+
+- Run only ODataReader tests:
+
+    ```text
+    crank --config benchmarks.yml --scenario Reader --profile local
+    ```
+- Run only ODataWriter tests:
+
+    ```text
+    crank --config benchmarks.yml --scenario Writer --profile local
+    ```
+
+- Run only UriParser tests:
+
+    ```text
+    crank --config benchmarks.yml --scenario UriParser --profile local
+    ```
+
+- Run tests that compare serialization performance of ODataWriter and System.Text.Json
+
+    ```text
+    crank --config benchmarks.yml --scenario SerializerBaselines --profile local
+    ```
+
+#### Run benchmarks on remote dedicated agents
+
+The `local` profile is provided for testing purposes, but it's not ideal for running benchmarks.
+For more stable results and results that we can more reliably compare, the following profiles are also
+available and should be preferred whenever possible:
+
+Profile       | Machine Architecture | OS
+--------------|----------------------|------
+`lab-windows` | INTEL, 12 Cores      | Windows Server 2016
+`lab-linux`   | INTEL, 12 Cores      | Ubuntu 18.04, Kernel 4.x
+
+Use the `--profile` argument to specify the profile you want to use. For example,
+to run the components benchmark on the Windows agent, run the following command:
+
+```
+crank --config benchmarks.yml --scenario Components --profile lab-windows
+```
+
+And to run on the Linux agent:
+
+```
+crank --config benchmarks.yml --scenario Components --profile lab-linux
+```
+
+PS: We should not use these machines to run automated scheduled benchmarks.
+
+#### Run benchmarks against the official repo
+
+To run benchmarks against the official repo instead of your local repo, pass
+the `base=true` variable to the command, e.g.:
+
+```text
+crank --config benchmarks.yml --scenario Service --profile local --variable base=true
+```
+
+This will cause the crank agent to clone the official repo and run the tests against the `master` branch.
+
+You can specify a different branch, commit or tag using the `baseBranch` variable:
+
+```text
+crank --config benchmarks.yml --scenario Service --profile local --variable base=true --variable baseBranch=v7.6.4
+```
+
 ## 4. Documentation
 
 Please visit the [ODataLib docs](https://docs.microsoft.com/en-us/odata/) on docs.microsoft.com. It has detailed descriptions on each feature provided by OData lib, how to use the OData .Net Client to consume OData service etc.

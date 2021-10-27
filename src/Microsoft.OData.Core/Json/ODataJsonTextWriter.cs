@@ -7,8 +7,8 @@
 namespace Microsoft.OData
 {
     using System;
+    using System.Diagnostics;
     using System.IO;
-    using System.Linq;
     using System.Text;
     using System.Threading.Tasks;
     using Microsoft.OData.Buffers;
@@ -30,9 +30,9 @@ namespace Microsoft.OData
         private readonly ODataStringEscapeOption escapeOption = ODataStringEscapeOption.EscapeOnlyControls;
 
         /// <summary>
-        /// The buffer to help when converting binary values.
+        /// The wrapped buffer to help when converting binary values.
         /// </summary>
-        private char[] streamingBuffer;
+        private Ref<char[]> wrappedBuffer;
 
         /// <summary>
         /// Get/sets the character buffer pool for streaming.
@@ -45,13 +45,13 @@ namespace Microsoft.OData
         /// <param name="textWriter">The underlying TextWriter used when writing JSON</param>
         /// <param name="buffer">Buffer used when converting binary values.</param>
         /// <param name="bufferPool">Buffer pool used for renting a buffer.</param>
-        internal ODataJsonTextWriter(TextWriter textWriter, ref char[] buffer, ICharArrayPool bufferPool)
+        internal ODataJsonTextWriter(TextWriter textWriter, Ref<char[]> wrappedBuffer, ICharArrayPool bufferPool)
             : base(System.Globalization.CultureInfo.InvariantCulture)
         {
             ExceptionUtils.CheckArgumentNotNull(textWriter, "textWriter");
 
             this.textWriter = textWriter;
-            this.streamingBuffer = buffer;
+            this.wrappedBuffer = wrappedBuffer;
             this.bufferPool = bufferPool;
         }
 
@@ -301,22 +301,19 @@ namespace Microsoft.OData
         /// <inheritdoc/>
         public override Task WriteAsync(char value)
         {
-            return TaskUtils.GetTaskForSynchronousOperation(() =>
-                this.Write(value));
+            return this.WriteEscapedCharValueAsync(value);
         }
 
         /// <inheritdoc/>
         public override Task WriteAsync(char[] buffer, int index, int count)
         {
-            return TaskUtils.GetTaskForSynchronousOperation(() =>
-                this.Write(buffer, index, count));
+            return this.WriteEscapedCharArrayAsync(buffer, index, count);
         }
 
         /// <inheritdoc/>
         public override Task WriteAsync(string value)
         {
-            return TaskUtils.GetTaskForSynchronousOperation(() =>
-                this.Write(value));
+            return this.WriteEscapedStringValueAsync(value);
         }
 
         /// <inheritdoc/>
@@ -326,26 +323,25 @@ namespace Microsoft.OData
         }
 
         /// <inheritdoc/>
-        public override Task WriteLineAsync(char value)
+        public override async Task WriteLineAsync(char value)
         {
-            return TaskUtils.GetTaskForSynchronousOperation(() =>
-                this.WriteLine(value));
+            await this.WriteAsync(value).ConfigureAwait(false);
+            await this.textWriter.WriteLineAsync().ConfigureAwait(false);
         }
 
         /// <inheritdoc/>
-        public override Task WriteLineAsync(char[] buffer, int index, int count)
+        public override async Task WriteLineAsync(char[] buffer, int index, int count)
         {
-            return TaskUtils.GetTaskForSynchronousOperation(() =>
-                this.WriteLine(buffer, index, count));
+            await this.WriteAsync(buffer, index, count).ConfigureAwait(false);
+            await this.textWriter.WriteLineAsync().ConfigureAwait(false);
         }
 
         /// <inheritdoc/>
-        public override Task WriteLineAsync(string value)
+        public override async Task WriteLineAsync(string value)
         {
-            return TaskUtils.GetTaskForSynchronousOperation(() =>
-                this.WriteLine(value));
+            await this.WriteAsync(value).ConfigureAwait(false);
+            await this.textWriter.WriteLineAsync().ConfigureAwait(false);
         }
-
 
         #endregion
 
@@ -360,20 +356,82 @@ namespace Microsoft.OData
         }
 
         #region private methods
+
+        /// <summary>
+        /// Writes a char value escaped where necessary.
+        /// </summary>
+        /// <param name="value">Char value to be written.</param>
         private void WriteEscapedCharValue(char value)
         {
             JsonValueUtils.WriteValue(this.textWriter, value, escapeOption);
         }
 
+        /// <summary>
+        /// Writes a string value with special characters escaped.
+        /// </summary>
+        /// <param name="value">String value to be written.</param>
         private void WriteEscapedStringValue(string value)
         {
-            JsonValueUtils.WriteEscapedJsonStringValue(this.textWriter, value, escapeOption, ref streamingBuffer, this.bufferPool);
+            Debug.Assert(this.wrappedBuffer != null, "wrappedBuffer != null");
+
+            JsonValueUtils.WriteEscapedJsonStringValue(this.textWriter, value, escapeOption, wrappedBuffer, this.bufferPool);
         }
 
+        /// <summary>
+        /// Escapes and writes a character array.
+        /// </summary>
+        /// <param name="value">Character array to be written.</param>
+        /// <param name="offset">Number of characters to skip in the character array.</param>
+        /// <param name="count">Number of characters to write from the character array.</param>
         private void WriteEscapedCharArray(char[] value, int offset, int count)
         {
-            JsonValueUtils.WriteEscapedCharArray(this.textWriter, value, offset, count, escapeOption, ref streamingBuffer, this.bufferPool);
+            Debug.Assert(this.wrappedBuffer != null, "wrappedBuffer != null");
+
+            JsonValueUtils.WriteEscapedCharArray(this.textWriter, value, offset, count, escapeOption, wrappedBuffer, this.bufferPool);
         }
+
         #endregion
+
+        #region Private async methods
+
+        /// <summary>
+        /// Asynchronously writes a char value escaped where necessary.
+        /// </summary>
+        /// <param name="value">Char value to be written.</param>
+        /// <returns>A task that represents the asynchronous write operation.</returns>
+        private Task WriteEscapedCharValueAsync(char value)
+        {
+            return this.textWriter.WriteValueAsync(value, escapeOption);
+        }
+
+        /// <summary>
+        /// Asynchronously writes a string value with special characters escaped.
+        /// </summary>
+        /// <param name="value">String value to be written.</param>
+        /// <returns>A task that represents the asynchronous write operation.</returns>
+        private Task WriteEscapedStringValueAsync(string value)
+        {
+            Debug.Assert(this.wrappedBuffer != null, "wrappedBuffer != null");
+
+            return this.textWriter.WriteEscapedJsonStringValueAsync(
+                value, escapeOption, this.wrappedBuffer, this.bufferPool);
+        }
+
+        /// <summary>
+        /// Asynchronously escapes and writes a character array.
+        /// </summary>
+        /// <param name="value">Character array to be written.</param>
+        /// <param name="offset">Number of characters to skip in the character array.</param>
+        /// <param name="count">Number of characters to write from the character array.</param>
+        /// <returns>A task that represents the asynchronous write operation.</returns>
+        private Task WriteEscapedCharArrayAsync(char[] value, int offset, int count)
+        {
+            Debug.Assert(this.wrappedBuffer != null, "wrappedBuffer != null");
+
+            return this.textWriter.WriteEscapedCharArrayAsync(
+                value, offset, count, escapeOption, this.wrappedBuffer, this.bufferPool);
+        }
+
+        #endregion Private async methods
     }
 }

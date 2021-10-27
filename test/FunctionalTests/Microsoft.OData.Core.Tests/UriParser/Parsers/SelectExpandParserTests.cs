@@ -298,6 +298,45 @@ namespace Microsoft.OData.Tests.UriParser.Parsers
             selectTermToken.SearchOption.ShouldBeStringLiteralToken("xyz");
         }
 
+        [Theory]
+        [InlineData("Emails($orderby=$this)", OrderByDirection.Ascending)]
+        [InlineData("Emails($orderby=$this asc)", OrderByDirection.Ascending)]
+        [InlineData("Emails($orderby=$this desc)", OrderByDirection.Descending)]
+        public void ParseOrderByThisInSelectWorks(string queryString, OrderByDirection orderByDirection)
+        {
+            // Arrange & Act
+            SelectToken selectToken = ParseSelectClause(queryString);
+
+            // Assert
+            Assert.NotNull(selectToken);
+            SelectTermToken selectTermToken = Assert.Single(selectToken.SelectTerms);
+            selectTermToken.PathToProperty.ShouldBeNonSystemToken("Emails");
+            Assert.NotNull(selectTermToken.OrderByOptions);
+            OrderByToken orderBy = Assert.Single(selectTermToken.OrderByOptions);
+            orderBy.Expression.ShouldBeRangeVariableToken("$this");
+            Assert.Equal(orderByDirection, orderBy.Direction);
+        }
+
+        [Fact]
+        public void ParseFilterByThisInSelectWorks()
+        {
+            // Arrange & Act
+            SelectToken selectToken = ParseSelectClause("RelatedSSNs($filter=endswith($this,'xyz'))");
+
+            // Assert
+            Assert.NotNull(selectToken);
+            SelectTermToken selectTermToken = Assert.Single(selectToken.SelectTerms);
+            selectTermToken.PathToProperty.ShouldBeNonSystemToken("RelatedSSNs");
+            Assert.NotNull(selectTermToken.FilterOption);
+
+            FunctionCallToken functionCallToken = (FunctionCallToken) selectTermToken.FilterOption;
+            functionCallToken.ShouldBeFunctionCallToken("endswith");
+            Assert.Equal(2, functionCallToken.Arguments.Count());
+
+            FunctionParameterToken parameterToken = functionCallToken.Arguments.First();
+            parameterToken.ValueToken.ShouldBeRangeVariableToken(ExpressionConstants.This);
+        }
+
         [Fact]
         public void ParseNestedSelectInSelectWorks()
         {
@@ -360,7 +399,7 @@ namespace Microsoft.OData.Tests.UriParser.Parsers
         {
             ODataUriParserConfiguration configuration = new ODataUriParserConfiguration(EdmCoreModel.Instance)
             {
-                Settings = { PathLimit = 10, FilterLimit = 10, OrderByLimit = 10, SearchLimit = 10, SelectExpandLimit = 10 }
+                Settings = { PathLimit = 10, FilterLimit = 20, OrderByLimit = 10, SearchLimit = 10, SelectExpandLimit = 10 }
             };
 
             SelectExpandParser expandParser = new SelectExpandParser(select, configuration.Settings.SelectExpandLimit, configuration.EnableCaseInsensitiveUriFunctionIdentifier)
@@ -372,6 +411,88 @@ namespace Microsoft.OData.Tests.UriParser.Parsers
             };
 
             return expandParser.ParseSelect();
+        }
+        #endregion
+
+        #region ParseSelectExpand
+        [Fact]
+        public void NoDollarNestedOptions()
+        {
+            // Act
+            SelectExpandParserTests.ParseSelectExpand(
+                select: "prop1,prop2(select=prop3,prop4)",
+                expand: "nav1,nav2(select=prop5,prop6;expand=nav3,nav4)",
+                out SelectToken selectToken,
+                out ExpandToken expandToken,
+                enableNoDollarQueryOptions: true);
+
+            // Assert Select
+            Assert.NotNull(selectToken.Properties);
+            PathSegmentToken[] properties = selectToken.Properties.ToArray();
+            Assert.Equal(2, properties.Length);
+            properties[0].ShouldBeNonSystemToken("prop1");
+            properties[1].ShouldBeNonSystemToken("prop2");
+
+            Assert.NotNull(selectToken.SelectTerms);
+            SelectTermToken[] selectTerms = selectToken.SelectTerms.ToArray();
+            Assert.Equal(2, selectTerms.Length);
+            selectTerms[0].PathToProperty.ShouldBeNonSystemToken("prop1");
+            Assert.Null(selectTerms[0].SelectOption);
+            selectTerms[1].PathToProperty.ShouldBeNonSystemToken("prop2");
+            Assert.NotNull(selectTerms[1].SelectOption);
+            Assert.NotNull(selectTerms[1].SelectOption.SelectTerms);
+            SelectTermToken[] subSelectTerms = selectTerms[1].SelectOption.SelectTerms.ToArray();
+            Assert.Equal(2, subSelectTerms.Length);
+            subSelectTerms[0].PathToProperty.ShouldBeNonSystemToken("prop3");
+            subSelectTerms[1].PathToProperty.ShouldBeNonSystemToken("prop4");
+
+            // Assert Expand
+            Assert.NotNull(expandToken.ExpandTerms);
+            ExpandTermToken[] expandTerms = expandToken.ExpandTerms.ToArray();
+            Assert.Equal(2, expandTerms.Length);
+            expandTerms[0].PathToProperty.ShouldBeNonSystemToken("nav1");
+            Assert.Null(expandTerms[0].ExpandOption);
+            Assert.Null(expandTerms[0].SelectOption);
+            expandTerms[1].PathToProperty.ShouldBeNonSystemToken("nav2");
+            Assert.NotNull(expandTerms[1].ExpandOption);
+            ExpandTermToken[] subExpandTerms = expandTerms[1].ExpandOption.ExpandTerms.ToArray();
+            Assert.Equal(2, subExpandTerms.Length);
+            subExpandTerms[0].PathToProperty.ShouldBeNonSystemToken("nav3");
+            Assert.Null(subExpandTerms[0].ExpandOption);
+            Assert.Null(subExpandTerms[0].SelectOption);
+            subExpandTerms[1].PathToProperty.ShouldBeNonSystemToken("nav4");
+            Assert.Null(subExpandTerms[1].ExpandOption);
+            Assert.Null(subExpandTerms[1].SelectOption);
+            Assert.NotNull(expandTerms[1].SelectOption);
+            subSelectTerms = expandTerms[1].SelectOption.SelectTerms.ToArray();
+            Assert.Equal(2, subSelectTerms.Length);
+            subSelectTerms[0].PathToProperty.ShouldBeNonSystemToken("prop5");
+            Assert.Null(subSelectTerms[0].SelectOption);
+            subSelectTerms[1].PathToProperty.ShouldBeNonSystemToken("prop6");
+            Assert.Null(subSelectTerms[1].SelectOption);
+        }
+
+        private static void ParseSelectExpand(
+            string select,
+            string expand,
+            out SelectToken selectToken,
+            out ExpandToken expandToken,
+            int selectExpandLimit = ODataUriParserSettings.DefaultSelectExpandLimit,
+            bool enableCaseInsensitiveUriFunctionIdentifier = false,
+            bool enableNoDollarQueryOptions = false)
+        {
+            SelectExpandSyntacticParser.Parse(
+                select,
+                expand,
+                parentStructuredType: null,
+                new ODataUriParserConfiguration(EdmCoreModel.Instance)
+                {
+                    EnableCaseInsensitiveUriFunctionIdentifier = enableCaseInsensitiveUriFunctionIdentifier,
+                    EnableNoDollarQueryOptions = enableNoDollarQueryOptions,
+                    Settings = { SelectExpandLimit = selectExpandLimit },
+                },
+                out expandToken,
+                out selectToken);
         }
         #endregion
 
@@ -674,7 +795,7 @@ namespace Microsoft.OData.Tests.UriParser.Parsers
             ExpandToken expandTree;
             ODataUriParserConfiguration configuration = new ODataUriParserConfiguration(EdmCoreModel.Instance)
             {
-                Settings = { PathLimit = 2, FilterLimit = 7, OrderByLimit = 7, SearchLimit = 7, SelectExpandLimit = 5 }
+                Settings = { PathLimit = 2, FilterLimit = 8, OrderByLimit = 8, SearchLimit = 7, SelectExpandLimit = 5 }
             };
 
             SelectExpandSyntacticParser.Parse(select, expand, null , configuration, out expandTree, out selectTree);

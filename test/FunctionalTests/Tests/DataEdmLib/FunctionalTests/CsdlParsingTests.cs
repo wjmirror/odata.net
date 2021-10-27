@@ -18,9 +18,6 @@ namespace EdmLibTests.FunctionalTests
     using Microsoft.OData.Edm.Csdl;
     using Microsoft.OData.Edm.Validation;
     using Microsoft.OData.Edm.Vocabularies;
-#if SILVERLIGHT
-    using Microsoft.Silverlight.Testing;
-#endif
     using Microsoft.VisualStudio.TestTools.UnitTesting;
 
     [TestClass]
@@ -1408,7 +1405,7 @@ namespace EdmLibTests.FunctionalTests
             };
             bool parsed = CsdlReader.TryParse(XmlReader.Create(new StringReader(edmx)), Enumerable.Empty<IEdmModel>(), settings, out model, out errors);
             Assert.AreEqual(true, parsed);
-            Assert.AreEqual(3, errors.Count());
+            Assert.AreEqual(1, errors.Count());
             Assert.IsNotNull(model.FindType("NS.Ref1.VipCustomer"), "referenced type should be found");
             IEdmEntitySet entitySet = model.EntityContainer.EntitySets().First<IEdmEntitySet>(s => s.Name == "VipCustomers");
             Assert.IsNotNull(entitySet, "should not be null");
@@ -1421,7 +1418,7 @@ namespace EdmLibTests.FunctionalTests
             };
             parsed = CsdlReader.TryParse(XmlReader.Create(new StringReader(edmx)), Enumerable.Empty<IEdmModel>(), settings, out model, out errors);
             Assert.AreEqual(false, parsed);
-            Assert.AreEqual(3, errors.Count());
+            Assert.AreEqual(1, errors.Count());
         }
 
         [TestMethod]

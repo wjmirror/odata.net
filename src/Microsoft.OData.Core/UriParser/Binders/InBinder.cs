@@ -19,6 +19,8 @@ namespace Microsoft.OData.UriParser
     /// </summary>
     internal sealed class InBinder
     {
+        private const string NullLiteral = "null";
+
         /// <summary>
         /// Method to use for binding the parent node, if needed.
         /// </summary>
@@ -89,10 +91,6 @@ namespace Microsoft.OData.UriParser
                 {
                     Debug.Assert(bracketLiteralText[bracketLiteralText.Length - 1] == ')',
                         "Collection with opening '(' should have corresponding ')'");
-                    if (bracketLiteralText.Replace(" ", String.Empty) == "()")
-                    {
-                        throw new ODataException(ODataErrorStrings.MetadataBinder_RightOperandNotCollectionValue);
-                    }
 
                     StringBuilder replacedText = new StringBuilder(bracketLiteralText);
                     replacedText[0] = '[';
@@ -116,6 +114,17 @@ namespace Microsoft.OData.UriParser
                         // Sample: [D01663CF-EB21-4A0E-88E0-361C10ACE7FD, 492CF54A-84C9-490C-A7A4-B5010FAD8104]
                         //    ==>  ['D01663CF-EB21-4A0E-88E0-361C10ACE7FD', '492CF54A-84C9-490C-A7A4-B5010FAD8104']
                         bracketLiteralText = NormalizeGuidCollectionItems(bracketLiteralText);
+                    }
+                    else if (expectedTypeFullName.Equals("Edm.DateTimeOffset", StringComparison.Ordinal) ||
+                             expectedTypeFullName.Equals("Edm.Date", StringComparison.Ordinal) ||
+                             expectedTypeFullName.Equals("Edm.TimeOfDay", StringComparison.Ordinal) ||
+                             expectedTypeFullName.Equals("Edm.Duration", StringComparison.Ordinal))
+                    {
+                        // For collection of Date/Time/Duration items, need to convert the Date/Time/Duration literals to single-quoted form, so that it is compatible
+                        // with the Json reader used for deserialization.
+                        // Sample: [1970-01-01T00:00:00Z, 1980-01-01T01:01:01+01:00]
+                        //    ==>  ['1970-01-01T00:00:00Z', '1980-01-01T01:01:01+01:00']
+                        bracketLiteralText = NormalizeDateTimeCollectionItems(bracketLiteralText);
                     }
                 }
 
@@ -187,9 +196,9 @@ namespace Microsoft.OData.UriParser
                             i = index - 1;
                         }
 
-                        if (subStr == "null")
+                        if (subStr == NullLiteral)
                         {
-                            sb.Append("null");
+                            sb.Append(NullLiteral);
                         }
                         else
                         {
@@ -223,6 +232,13 @@ namespace Microsoft.OData.UriParser
                 char next = input[k];
                 if (next == '"')
                 {
+                    // If prev and next are both double quotes, then it's an empty string.
+                    if (input[k - 1] == '"')
+                    {
+                        // We append \"\" so as to return "\"\"" instead of "".
+                        // This is to avoid passing an empty string to the ConstantNode.
+                        sb.Append("\\\"\\\"");
+                    }
                     break;
                 }
                 else if (next == '\\')
@@ -268,7 +284,20 @@ namespace Microsoft.OData.UriParser
                 {
                     if (k + 1 >= length || input[k + 1] != '\'')
                     {
-                        // match with single qutoe ('), stop it.
+                        // If prev and next are both single quotes, then it's an empty string.
+                        if (input[k - 1] == '\'')
+                        {
+                            if(k > 2 && input[k - 2] == '\'')
+                            {
+                                // Ignore we have 3 single quotes e.g 'xyz'''
+                                // It means we need to escape the double quotes to return the result "xyz'"
+                                continue;
+                            }
+                            // We append \"\" so as to return "\"\"" instead of "".
+                            // This is to avoid passing an empty string to the ConstantNode.
+                            sb.Append("\\\"\\\"");
+                        }
+                        // match with single quote ('), stop it.
                         break;
                     }
                     else
@@ -300,11 +329,52 @@ namespace Microsoft.OData.UriParser
 
         private static string NormalizeGuidCollectionItems(string bracketLiteralText)
         {
-            string[] items = bracketLiteralText.Substring(1, bracketLiteralText.Length - 2).Split(',')
+            string normalizedText = bracketLiteralText.Substring(1, bracketLiteralText.Length - 2).Trim();
+
+            // If we have empty brackets ()
+            if (normalizedText.Length == 0)
+            {
+                return "[]";
+            }
+
+            string[] items = normalizedText.Split(',')
                 .Select(s => s.Trim()).ToArray();
 
             for (int i = 0; i < items.Length; i++)
             {
+                if (items[i] != NullLiteral && items[i][0] != '\'' && items[i][0] != '"')
+                {
+                    items[i] = String.Format(CultureInfo.InvariantCulture, "'{0}'", items[i]);
+                }
+            }
+
+            return "[" + String.Join(",", items) + "]";
+        }
+
+        private static string NormalizeDateTimeCollectionItems(string bracketLiteralText)
+        {
+            string normalizedText = bracketLiteralText.Substring(1, bracketLiteralText.Length - 2).Trim();
+
+            // If we have empty brackets ()
+            if (normalizedText.Length == 0)
+            {
+                return "[]";
+            }
+
+            string[] items = normalizedText.Split(',')
+                .Select(s => s.Trim()).ToArray();
+
+            for (int i = 0; i < items.Length; i++)
+            {
+                const string durationPrefix = "duration";
+                if (items[i] == NullLiteral)
+                {
+                    continue;
+                }
+                if (items[i].StartsWith(durationPrefix, StringComparison.Ordinal))
+                {
+                    items[i] = items[i].Remove(0, durationPrefix.Length);
+                }
                 if (items[i][0] != '\'' && items[i][0] != '"')
                 {
                     items[i] = String.Format(CultureInfo.InvariantCulture, "'{0}'", items[i]);

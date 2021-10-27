@@ -6,6 +6,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Microsoft.OData.Edm.Csdl.Parsing.Ast;
 using Microsoft.OData.Edm.Validation;
@@ -25,6 +26,8 @@ namespace Microsoft.OData.Edm.Csdl.CsdlSemantics
         private static readonly Func<CsdlSemanticsElement, IEnumerable<IEdmDirectValueAnnotation>> ComputeDirectValueAnnotationsFunc = (me) => me.ComputeDirectValueAnnotations();
 
         private static readonly IEnumerable<IEdmVocabularyAnnotation> emptyVocabularyAnnotations = Enumerable.Empty<IEdmVocabularyAnnotation>();
+
+        private string annotationFullName = null;
 
         protected CsdlSemanticsElement(CsdlElement element)
         {
@@ -87,6 +90,18 @@ namespace Microsoft.OData.Edm.Csdl.CsdlSemantics
         }
 
         /// <summary>
+        /// Gets the cached annotation full qualified name.
+        /// </summary>
+        /// <param name="element">This element as <see cref="IEdmVocabularyAnnotatable"/>.</param>
+        /// <returns>The cached annotation full qualified name.</returns>
+        public string GetAnnotationFullQualifiedName(IEdmVocabularyAnnotatable element)
+        {
+            Debug.Assert(object.ReferenceEquals(this as IEdmVocabularyAnnotatable, element));
+            this.annotationFullName = this.annotationFullName ?? EdmUtil.FullyQualifiedName(element);
+            return this.annotationFullName;
+        }
+
+        /// <summary>
         /// Allocates a new list if needed, and adds the item to the list.
         /// </summary>
         /// <typeparam name="T">Type of the list.</typeparam>
@@ -127,20 +142,19 @@ namespace Microsoft.OData.Edm.Csdl.CsdlSemantics
                 return null;
             }
 
-            List<CsdlDirectValueAnnotation> annotations = this.Element.ImmediateValueAnnotations.ToList();
-            if (annotations.FirstOrDefault() != null)
-            {
-                List<IEdmDirectValueAnnotation> wrappedAnnotations = new List<IEdmDirectValueAnnotation>();
+            List<IEdmDirectValueAnnotation> wrappedAnnotations = null;
 
-                foreach (CsdlDirectValueAnnotation annotation in annotations)
+            foreach (CsdlDirectValueAnnotation annotation in this.Element.ImmediateValueAnnotations)
+            {
+                if (wrappedAnnotations == null)
                 {
-                    wrappedAnnotations.Add(new CsdlSemanticsDirectValueAnnotation(annotation, this.Model));
+                    wrappedAnnotations = new List<IEdmDirectValueAnnotation>();
                 }
 
-                return wrappedAnnotations;
+                wrappedAnnotations.Add(new CsdlSemanticsDirectValueAnnotation(annotation, this.Model));
             }
 
-            return null;
+            return wrappedAnnotations;
         }
     }
 }

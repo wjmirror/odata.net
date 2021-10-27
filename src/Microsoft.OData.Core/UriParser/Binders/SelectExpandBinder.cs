@@ -282,8 +282,7 @@ namespace Microsoft.OData.UriParser
                 return new PathSelectItem(new ODataSelectPath(selectedPath));
             }
 
-            // We should use the "NavigationSource" at this level for the next level binding.
-            IEdmNavigationSource targetNavigationSource = this.NavigationSource;
+            IEdmNavigationSource targetNavigationSource = null;
             ODataPathSegment lastSegment = selectedPath.Last();
             IEdmType targetElementType = lastSegment.TargetEdmType;
             IEdmCollectionType collection = targetElementType as IEdmCollectionType;
@@ -293,6 +292,14 @@ namespace Microsoft.OData.UriParser
             }
 
             IEdmTypeReference elementTypeReference = targetElementType.ToTypeReference();
+
+            // When Creating Range Variables, we only need a Navigation Source when the elementTypeReference is a StructuredTypeReference.
+            // When the elementTypeReference is NOT StructuredTypeReference, We will create a NonResourceRangeVariable which don't require a Navigation Source.
+            if (elementTypeReference != null && elementTypeReference.IsStructured())
+            {
+                // We should use the "NavigationSource" at this level for the next level binding.
+                targetNavigationSource = this.NavigationSource;
+            }
 
             // $compute
             ComputeClause compute = BindCompute(tokenIn.ComputeOption, this.ResourcePathNavigationSource, targetNavigationSource, elementTypeReference);
@@ -362,19 +369,48 @@ namespace Microsoft.OData.UriParser
                 currentNavProp = ParseComplexTypesBeforeNavigation(currentComplexProp, ref firstNonTypeToken, pathSoFar);
             }
 
+            bool isRef = false;
+            bool isCount = false;
+            bool hasDerivedTypeSegment = false;
+            IEdmType derivedType = null;
+
+            // Handle $expand=Customer/Fully.Qualified.Namespace.VipCustomer
+            // The deriveTypeToken is Fully.Qualified.Namespace.VipCustomer
+            if (firstNonTypeToken.NextToken != null && firstNonTypeToken.NextToken.IsNamespaceOrContainerQualified())
+            {
+                hasDerivedTypeSegment = true;
+                derivedType = UriEdmHelpers.FindTypeFromModel(this.Model, firstNonTypeToken.NextToken.Identifier, this.configuration.Resolver);
+
+                if (derivedType == null)
+                {
+                    // Exception example: The type Fully.Qualified.Namespace.UndefinedType is not defined in the model.
+                    throw new ODataException(ODataErrorStrings.ExpandItemBinder_CannotFindType(firstNonTypeToken.NextToken.Identifier));
+                }
+
+                // In this example: $expand=Customer/Fully.Qualified.Namespace.VipCustomer
+                // We validate that the derived type Fully.Qualified.Namespace.VipCustomer is related to Navigation property Customer.
+                UriEdmHelpers.CheckRelatedTo(currentNavProp.ToEntityType(), derivedType);
+            }
+
             // ensure that we're always dealing with proper V4 syntax
-            if (firstNonTypeToken.NextToken != null && firstNonTypeToken.NextToken.NextToken != null)
+            if (firstNonTypeToken?.NextToken?.NextToken != null && !hasDerivedTypeSegment)
             {
                 throw new ODataException(ODataErrorStrings.ExpandItemBinder_TraversingMultipleNavPropsInTheSamePath);
             }
 
-            bool isRef = false;
-            if (firstNonTypeToken.NextToken != null)
+            if ((firstNonTypeToken.NextToken != null && !hasDerivedTypeSegment) || 
+                (firstNonTypeToken?.NextToken?.NextToken != null && hasDerivedTypeSegment))
             {
+                PathSegmentToken nextToken = hasDerivedTypeSegment ? firstNonTypeToken.NextToken.NextToken : firstNonTypeToken.NextToken;
+
                 // lastly... make sure that, since we're on a NavProp, that the next token isn't null.
-                if (firstNonTypeToken.NextToken.Identifier == UriQueryConstants.RefSegment)
+                if (nextToken.Identifier == UriQueryConstants.RefSegment)
                 {
                     isRef = true;
+                }
+                else if (nextToken.Identifier == UriQueryConstants.CountSegment)
+                {
+                    isCount = true;
                 }
                 else
                 {
@@ -385,7 +421,6 @@ namespace Microsoft.OData.UriParser
             // Add the segments in select and expand to parsed segments
             List<ODataPathSegment> parsedPath = new List<ODataPathSegment>(this.parsedSegments);
             parsedPath.AddRange(pathSoFar);
-
             IEdmNavigationSource targetNavigationSource = null;
             if (this.NavigationSource != null)
             {
@@ -396,6 +431,14 @@ namespace Microsoft.OData.UriParser
             NavigationPropertySegment navSegment = new NavigationPropertySegment(currentNavProp, targetNavigationSource);
             pathSoFar.Add(navSegment);
             parsedPath.Add(navSegment); // Add the navigation property segment to parsed segments for future usage.
+
+            if (hasDerivedTypeSegment)
+            {
+                TypeSegment derivedTypeSegment = new TypeSegment(derivedType, targetNavigationSource);
+                pathSoFar.Add(derivedTypeSegment);
+                parsedPath.Add(derivedTypeSegment);
+            }
+
             ODataExpandPath pathToNavProp = new ODataExpandPath(pathSoFar);
 
             // $apply
@@ -419,6 +462,11 @@ namespace Microsoft.OData.UriParser
             if (isRef)
             {
                 return new ExpandedReferenceSelectItem(pathToNavProp, targetNavigationSource, filterOption, orderbyOption, tokenIn.TopOption, tokenIn.SkipOption, tokenIn.CountQueryOption, searchOption, computeOption, applyOption);
+            }
+
+            if (isCount)
+            {
+                return new ExpandedCountSelectItem(pathToNavProp, targetNavigationSource, filterOption, searchOption);
             }
 
             // $select & $expand
@@ -894,6 +942,11 @@ namespace Microsoft.OData.UriParser
                 state.RangeVariables.Push(explicitRangeVariable);
             }
 
+            // Create $this rangeVariable and add it to the Stack.
+            RangeVariable dollarThisRangeVariable = NodeFactory.CreateDollarThisRangeVariable(
+                elementType != null ? elementType : targetNavigationSource.EntityType().ToTypeReference(), targetNavigationSource);
+            state.RangeVariables.Push(dollarThisRangeVariable);
+
             return state;
         }
 
@@ -952,8 +1005,10 @@ namespace Microsoft.OData.UriParser
             }
 
             // ignore all property selection if there's a wildcard select item.
-            if (selectItems.Any(x => x is WildcardSelectItem) && IsStructuralOrNavigationPropertySelectionItem(itemToAdd))
+            WildcardSelectItem wildcardSelectItem = selectItems.OfType<WildcardSelectItem>().FirstOrDefault();
+            if (wildcardSelectItem != null && IsStructuralOrNavigationPropertySelectionItem(itemToAdd))
             {
+                wildcardSelectItem.AddSubsumed(itemToAdd);
                 return;
             }
 
@@ -972,9 +1027,11 @@ namespace Microsoft.OData.UriParser
             }
 
             // if the selected item is "*", filter the existing property selection.
-            if (itemToAdd is WildcardSelectItem)
+            wildcardSelectItem = itemToAdd as WildcardSelectItem;
+            if (wildcardSelectItem != null)
             {
-                var shouldFilter = selectItems.Where(s => IsStructuralSelectionItem(s)).ToList();
+                List<SelectItem> shouldFilter = selectItems.Where(s => IsStructuralSelectionItem(s)).ToList();
+                wildcardSelectItem.AddSubsumed(shouldFilter);
                 foreach (var filterItem in shouldFilter)
                 {
                     selectItems.Remove(filterItem);
