@@ -6,4 +6,21 @@
 4. Download the build artifacts from the nightly build to your local machine
 5. Mark the nightly build to be retained indefinitely
 6. Download NuGet Package Explorer from the windows store and use it to verify the URLs of each package for license, release notes, and package information
-7. 
+7. Log into to your nuget.org account and link it to your AAD account. Ask someone from the team to add you as an administrator. You will need to accept this request once it is sent to you
+8. Create a new API key for this release and limit the lifetime so that it won't be re-used
+9. Verify the signatures of the packages downloaded from the build artifacts: `nuget verify -Signature Microsoft.Spatial.7.4.4.nupkg`. Do the same for Microsoft.OData.Edm, Microsoft.OData.Core, and Microsoft.OData.Client, as well as all 4 corresponding `snupkg` files
+10. Upload all 4 nupkg files using the nuget.org UI in the following order:
+- Microsoft.Spatial
+- Microsoft.OData.Edm
+- Microsoft.OData.Core
+- Microsoft.OData.Client
+11. Upload all 4 snupkg files in the same order
+12. Create a new tag corresponding to the new version number by running:
+```
+git tag -a 6.16.0 -m "6.16.0 RTM" 
+git push origin 6.16.0
+```
+and repacing `6.16.0` with the new version number
+
+13. Create a [new release])(https://github.com/OData/odata.net/releases) in github. Note that the assets files will be generated automatically by github when the release is created
+14. Cherry-pick the change log commit in the docs repo from the `main` branch to the `live` branch
