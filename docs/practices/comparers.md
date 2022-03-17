@@ -47,6 +47,7 @@ public sealed class FooComparer : IEqualityComparer<Foo>
 {
   public bool Equals(Foo x, Foo y)
   {
+    // omit this check if Foo is a value type
     if (object.ReferenceEquals(x, y))
     {
       return true;
@@ -87,8 +88,41 @@ The implementation of the generic interface is extremely close to the non-generi
 ```
 public sealed class FooComparer : IComparer
 {
+  public int Compare(object x, object y)
+  {
+    if (object.ReferenceEquals(x, y))
+    {
+      return 0;
+    }
   
+    if (x == null)
+    {
+      return -1;
+    }
+  
+    if (y == null)
+    {
+      return 1;
+    }
+  
+    // implementation specific logic should go here
+    ...
+  
+    return Comparer.Default.Compare(x, y);
+  }
 }
 ```
 
 Probably the most striking note here is when `ArgumentException` is thrown. The documentation is very specific about this, but is clearly not correct, or else this interface would not provide much value. Normally, when MSDN documentation makes not of an exception, it does so to specify that the exception *will* be thrown if the criteria are met. In this case, it indicates that the exception *may* be thrown if the criteria are met. Really, what this means is that your comparer can have custom logic to compare two objects that don't implement `IComparable`. However, if your comparer *cannot* handle such a case, the default logic should be to find one of the two objects that implement `IComparable` and use that implementation to compare them. In this situation, if neither object implements `IComparable`, then an `ArgumentException` should be thrown. Importantly, this is the exact beahvior of `Comparer.Default`, so we do not have to worry about implementing this logic for every `IComparer` implementation. 
+  
+Another interesting aspect of this implementation is that (per the documentation), `null` should always be considered "less" than a non-`null` value, so after we have confirmed with `object.ReferenceEquals` that *both* `x` and `y` are not `null`, then if *either* are `null`, that one is "less" than the other. 
+  
+```
+public sealed class FooComparer : IComparer<Foo>
+{
+  public int Compare(Foo x, Foo y)
+  {
+    
+  }
+}
+```
