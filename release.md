@@ -1,4 +1,4 @@
-1. Increment the version number referenced during build in [`Versioning.props`](tools/CustomMSBuild/Versioning.props) by using [semenatic versioning](https://semver.org/)
+1. Increment the version number referenced during build in [`Versioning.props`](tools/CustomMSBuild/Versioning.props) by using [semantic versioning](https://semver.org/)
 2. Kick off a new [nightly build](https://identitydivision.visualstudio.com/OData/_build?definitionId=1104) to generate the nuget packages that will be published for this release:
 ![](images/release/0.png)
 ![](images/release/1.png)
