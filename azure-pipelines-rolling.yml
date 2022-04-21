@@ -97,10 +97,16 @@ steps:
   displayName: 'Build Unit Test - EDM'  
   inputs:
     command: 'build'
-    arguments: '--configuration $(BuildConfiguration) --no-incremental'
+    arguments: '--configuration $(BuildConfiguration) --no-incremental -v n'
     projects: |
      $(Build.SourcesDirectory)\test\FunctionalTests\Microsoft.OData.Edm.Tests\Microsoft.OData.Edm.Tests.csproj
       
+- task: Powershell@2
+  displayName: 'check edm build'
+  inputs:
+    targetType: 'inline'
+    script: |
+      type "Job\14_Build Unit Test - EDM.txt"
      
 - task: DotNetCoreCLI@2
   displayName: 'Build Unit Test - Spatial'  
