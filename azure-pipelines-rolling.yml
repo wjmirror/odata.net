@@ -106,7 +106,7 @@ steps:
   inputs:
     targetType: 'inline'
     script: |
-      dir /a-d /b /s
+      "dir /a-d /b /s"
      
 - task: DotNetCoreCLI@2
   displayName: 'Build Unit Test - Spatial'  
