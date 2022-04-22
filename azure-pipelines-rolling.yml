@@ -72,7 +72,7 @@ steps:
     command: 'build'
     arguments: '--configuration $(BuildConfiguration) --no-incremental /flp:v=n'
     projects: |
-     $(Build.SourcesDirectory)\test\FunctionalTests\Microsoft.OData.Edm.Tests\Microsoft.OData.Edm.Tests.csproj
+     $(Build.SourcesDirectory)\src\Microsoft.Spatial\Microsoft.Spatial.csproj
       
 - task: Powershell@2
   displayName: 'check edm build'
