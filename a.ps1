@@ -1,1 +1,1 @@
-dir /a-d /b /s
+Get-ChildItem -Path .\ -Recurse -ErrorAction SilentlyContinue -Force
