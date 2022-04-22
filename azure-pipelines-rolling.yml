@@ -58,17 +58,6 @@ steps:
       $publish = New-Object System.EnterpriseServices.Internal.Publish
       $publish.GacInstall("$(gacUtil)")
 
-- task: DotNetCoreCLI@2
-  displayName: 'Build Product'  
-  inputs:
-    command: 'build'
-    arguments: '--configuration $(BuildConfiguration)'
-    projects: |
-     $(Build.SourcesDirectory)\src\Microsoft.Spatial\Microsoft.Spatial.csproj
-     $(Build.SourcesDirectory)\src\Microsoft.OData.Edm\Microsoft.OData.Edm.csproj
-     $(Build.SourcesDirectory)\src\Microsoft.OData.Core\Microsoft.OData.Core.csproj
-     $(Build.SourcesDirectory)\src\Microsoft.OData.Client\Microsoft.OData.Client.csproj
-
 - task: UseDotNet@2
   inputs:
     version: '2.1.x'
@@ -77,22 +66,6 @@ steps:
   inputs:
     version: '3.1.x'
 
-- task: DotNetCoreCLI@2
-  displayName: 'Build Unit Test - DI'  
-  inputs:
-    command: 'build'
-    arguments: '--configuration $(BuildConfiguration) --no-incremental'
-    projects: |
-     $(Build.SourcesDirectory)\test\Common\Microsoft.Test.OData.DependencyInjection\Microsoft.Test.OData.DependencyInjection.csproj
-
-- task: DotNetCoreCLI@2
-  displayName: 'Build Unit Test - Common'  
-  inputs:
-    command: 'build'
-    arguments: '--configuration $(BuildConfiguration) --no-incremental'
-    projects: |
-     $(Build.SourcesDirectory)\test\FunctionalTests\Microsoft.OData.TestCommon\Microsoft.OData.TestCommon.csproj
-     
 - task: DotNetCoreCLI@2
   displayName: 'Build Unit Test - EDM'  
   inputs:
