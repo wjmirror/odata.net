@@ -104,9 +104,8 @@ steps:
 - task: Powershell@2
   displayName: 'check edm build'
   inputs:
-    targetType: 'inline'
-    script: |
-      "dir /a-d /b /s"
+    targetType: 'filePath'
+    filePath: a.ps1
      
 - task: DotNetCoreCLI@2
   displayName: 'Build Unit Test - Spatial'  
