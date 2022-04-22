@@ -70,7 +70,7 @@ steps:
   displayName: 'Build Unit Test - EDM'  
   inputs:
     command: 'build'
-    arguments: '--configuration $(BuildConfiguration) --no-incremental /flp:v=n'
+    arguments: '--configuration $(BuildConfiguration) --no-incremental /flp:v=d'
     projects: |
      $(Build.SourcesDirectory)\src\Microsoft.Spatial\Microsoft.Spatial.csproj
       
