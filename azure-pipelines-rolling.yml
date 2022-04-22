@@ -70,7 +70,7 @@ steps:
   displayName: 'Build Unit Test - EDM'  
   inputs:
     command: 'build'
-    arguments: '--configuration $(BuildConfiguration) --no-incremental -v n'
+    arguments: '--configuration $(BuildConfiguration) --no-incremental /flp:v=n'
     projects: |
      $(Build.SourcesDirectory)\test\FunctionalTests\Microsoft.OData.Edm.Tests\Microsoft.OData.Edm.Tests.csproj
       
