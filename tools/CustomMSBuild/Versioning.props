@@ -2,10 +2,10 @@
 
   <!-- Set the version number: major, minor, build and release (i.e. alpha, beta or blank for RTM)-->
   <PropertyGroup>
-    <VersionMajor Condition="'$(VersionMajor)' == ''">7</VersionMajor>
-    <VersionMinor Condition="'$(VersionMinor)' == ''">10</VersionMinor>
-    <VersionBuildNumber Condition="'$(VersionBuildNumber)' == ''">0</VersionBuildNumber>
-    <VersionRelease Condition="'$(VersionRelease)' == ''"></VersionRelease>
+    <VersionMajor Condition="'$(VersionMajor)' == ''">99</VersionMajor>
+    <VersionMinor Condition="'$(VersionMinor)' == ''">1</VersionMinor>
+    <VersionBuildNumber Condition="'$(VersionBuildNumber)' == ''">1</VersionBuildNumber>
+    <VersionRelease Condition="'$(VersionRelease)' == ''">1</VersionRelease>
   </PropertyGroup>
 
   <!--
